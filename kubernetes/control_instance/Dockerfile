@@ -2,7 +2,7 @@ FROM alpine
 MAINTAINER Carlos Nunez <dev@carlosnunez.me>
 
 ENV CERT_UTILS_VERSION=1.2
-ENV KUBECTL_VERSION=1.10
+ENV KUBECTL_VERSION=1.10.2
 ENV EXTRA_BINARIES=jq,bash,curl
 
 # Install additional useful utilities
@@ -23,7 +23,7 @@ RUN for package in cfssl cfjson; \
 RUN curl --output /usr/local/bin/kubectl \
     --silent \
     --location \
-    https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/darwin/amd64/kubectl && \
+    https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl && \
   chmod +x /usr/local/bin/kubectl
 
 # Make the entrypoint bash
