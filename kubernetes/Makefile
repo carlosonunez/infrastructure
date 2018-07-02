@@ -1,5 +1,5 @@
 #!/usr/bin/env make
-MAKEOPTS += '--silent'
+MAKEFLAGS += '--silent'
 
 DOCKER_USERNAME ?= carlosonunez
 BATS_DOCKER_IMAGE ?= graze/bats
@@ -21,10 +21,11 @@ build_control_instance_docker_image:
 	docker build -t $(CONTROL_INSTANCE_DOCKER_IMAGE_NAME) \
 		-f $(CONTROL_INSTANCE_SOURCE_PATH)/Dockerfile \
 		--quiet \
-		$(CONTROL_INSTANCE_SOURCE_PATH)
+		$(CONTROL_INSTANCE_SOURCE_PATH) > /dev/null
 
 test_control_instance_docker_image:
 	docker run --volume $(CONTROL_INSTANCE_SOURCE_PATH):/app \
+		--volume /var/run/docker.sock:/var/run/docker.sock \
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(CONTROL_INSTANCE_DOCKER_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests

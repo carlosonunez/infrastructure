@@ -7,8 +7,8 @@
   expected_exit_code=0
   run bash -c "docker run --entrypoint bash  \
     "$DOCKER_IMAGE_UNDER_TEST" \
-    -c 'which kubectl'"
+    -c 'kubectl version'"
   >&2 echo "Test failed. Output: $output"
   [ "$status" -eq "$expected_exit_code" ]
-  [ "$output" -eq "/usr/local/bin/kubectl" ]
+  [ "$output" != "" ]
 }
