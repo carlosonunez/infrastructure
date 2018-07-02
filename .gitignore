@@ -1,0 +1,9 @@
+# Terraform ignores.
+*.terraform
+*.tfstate
+*.tfplan
+*.tfstate.lock
+terraform.tfvars
+
+# Ansible ignores
+*.retry
