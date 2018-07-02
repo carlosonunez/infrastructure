@@ -1,9 +1,14 @@
 #!/usr/bin/env bats
-load helpers/pre_and_post
+@test "Ensure that a Docker image was provided" {
+  [ "$DOCKER_IMAGE_UNDER_TEST" != "" ]
+}
 
-@test "Ensure that kubectl is present" {
+@test "Ensure that kubectl is present and in the right place" {
   expected_exit_code=0
-  run "docker run -it --entrypoint bash $CONTROL_INSTANCE_DOCKER_IMAGE_NAME \
-    -c 'which kubectl > /dev/null'
+  run bash -c "docker run --entrypoint bash  \
+    "$DOCKER_IMAGE_UNDER_TEST" \
+    -c 'which kubectl'"
+  >&2 echo "Test failed. Output: $output"
   [ "$status" -eq "$expected_exit_code" ]
+  [ "$output" -eq "/usr/local/bin/kubectl" ]
 }
