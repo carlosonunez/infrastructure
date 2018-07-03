@@ -10,6 +10,13 @@ variable "environment_name" {
 variable "kubernetes_node_ami_id" {
   description = "The AMI id to use for *all* Kubernetes nodes."
 }
+variable "kubernetes_node_instance_type" {
+  description = <<EOF
+The instance type to use for Kubernetes nodes.
+Because Kubernetes is memory-intensive, we recommend using a memory-optimized
+instance, such as an m* series.
+EOF
+}
 
 variable "cidr_block_for_kubernetes_clusters" {
   description = "The CIDR block to use for Kubernetes clusters."
