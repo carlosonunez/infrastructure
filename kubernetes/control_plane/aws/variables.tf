@@ -16,6 +16,7 @@ The instance type to use for Kubernetes nodes.
 Because Kubernetes is memory-intensive, we recommend using a memory-optimized
 instance, such as an m* series.
 EOF
+  default = "m3.medium"
 }
 
 variable "cidr_block_for_kubernetes_clusters" {
@@ -47,4 +48,11 @@ variable "kubernetes_cluster_subnet_tags" {
 variable "kubernetes_control_plane_security_group_tags" {
   description = "Custom tags to use for the security group associated with the control plane"
   default = {}
+}
+
+variable "kubernetes_control_plane_tags" {
+  description = "Tags to use for Kubernetes nodes."
+  default = {
+    "kubernetes_node_type" = "master"
+  }
 }
