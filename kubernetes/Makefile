@@ -40,8 +40,12 @@ SCRIPTS_PATH := $(shell \
 
 deploy_cluster:
 	$(MAKE) configure_terraform && \
-	$(MAKE) terraform_init && \
-	$(MAKE) terraform_validate
+	$(MAKE) terraform_init > /dev/null && \
+	$(MAKE) terraform_validate && \
+	$(MAKE) terraform_plan
+
+destroy_cluster:
+	$(MAKE) terraform_destroy
 
 deploy_tools_image:
 	$(MAKE) create_tools_image && \
@@ -54,7 +58,6 @@ configure_terraform:
 
 terraform_%:
 	action=$$(echo $@ | sed 's/terraform_//'); \
-	>&2 echo "The action to take: $$action"; \
 	docker run --volume "$(CONTROL_PLANE_SOURCE_PATH)/aws:/infra" \
 		--env-file .env \
 		--env AWS_ACCESS_KEY_ID \
