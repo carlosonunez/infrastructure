@@ -27,8 +27,8 @@ resource "aws_route_table" "kubernetes_clusters" {
   }
 }
 
-resource "aws_route_table_association" "kubernetes_clusters_subnet_link" {
+resource "aws_route_table_association" "kubernetes_clusters" {
   count = "${var.number_of_zones}"
-  subnet_id = "${aws_subnet.kubernetes_clusters.*.id}"
+  subnet_id = "${aws_subnet.kubernetes_clusters.*.id[count.index]}"
   route_table_id = "${aws_route_table.kubernetes_clusters.id}"
 }

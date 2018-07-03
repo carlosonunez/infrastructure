@@ -1,5 +1,6 @@
 #!/usr/bin/env make
 MAKEFLAGS += '--silent'
+SHELL := /usr/bin/env bash
 
 ifeq ("$(wildcard .env)","")
 $(error "Please create a .env.")
@@ -23,7 +24,7 @@ endif
 
 AWS_REGION ?= us-east-1
 DOCKER_HUB_USERNAME ?= carlosonunez
-DRY_RUN ?= false
+DRY_RUN ?= "false"
 BATS_DOCKER_IMAGE ?= graze/bats
 TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
 KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
@@ -40,6 +41,7 @@ SCRIPTS_PATH := $(shell \
 .PHONY: deploy_cluster deploy_tools_image
 
 deploy_cluster:
+	set -e; \
 	$(MAKE) configure_terraform && \
 	$(MAKE) terraform_init > /dev/null && \
 	$(MAKE) terraform_validate && \
@@ -47,11 +49,16 @@ deploy_cluster:
 	then \
 		$(MAKE) terraform_plan; \
 	else \
-		$(MAKE) terraform_apply; \
+		TERRAFORM_ARGS="-auto-approve" $(MAKE) terraform_apply; \
 	fi
 
 destroy_cluster:
-	$(MAKE) terraform_destroy
+	if [ "$(DRY_RUN)" == "true" ]; \
+	then \
+		$(MAKE) terraform_destroy; \
+	else \
+		TERRAFORM_ARGS=-auto-approve $(MAKE) terraform_destroy; \
+	fi
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
