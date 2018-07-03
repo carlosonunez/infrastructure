@@ -9,6 +9,7 @@ provider.tf
 backend.tf
 
 # Environment variable ignores
+.env
 .env.*
 env.*
 !.env.example

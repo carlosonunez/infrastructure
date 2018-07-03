@@ -1,11 +1,24 @@
 #!/usr/bin/env make
 MAKEFLAGS += '--silent'
 
+ifeq ("$(wildcard .env)","")
+$(error "Please create a .env.")
+endif
+
+include .env
+export $(shell cat .env | grep "^\#" | cut -f1 -d '=')
+
 ifeq ($(AWS_ACCESS_KEY_ID),)
 $(error Please provide an access key to an AWS account)
 endif
 ifeq ($(AWS_SECRET_ACCESS_KEY),)
 $(error Please provide a secret key to an AWS account)
+endif
+ifeq ($(TERRAFORM_STATE_S3_BUCKET),)
+$(error Please provide the bucket into which the Terraform state will be stored)
+endif
+ifeq ($(TERRAFORM_STATE_S3_KEY),)
+$(error Please provide the S3 key for the TERRAFORM_STATE_S3_BUCKET)
 endif
 
 AWS_REGION ?= us-east-1
@@ -34,6 +47,11 @@ deploy_tools_image:
 .PHONY: configure_terraform
 
 configure_terraform:
+	AWS_REGION=$(AWS_REGION) \
+	AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) \
+	AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) \
+	TERRAFORM_STATE_S3_BUCKET=$(TERRAFORM_STATE_S3_BUCKET) \
+	TERRAFORM_STATE_S3_KEY=$(TERRAFORM_STATE_S3_KEY) \
 	$(SCRIPTS_PATH)/create_terraform_configuration.sh
 
 .PHONY: \
