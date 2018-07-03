@@ -76,6 +76,7 @@ terraform_%:
 		--env AWS_ACCESS_KEY_ID \
 		--env AWS_SECRET_ACCESS_KEY \
 		--env AWS_REGION \
+		--env TF_VAR_provisioning_machine_ip_address $(THIS_IP_ADDRESS) \
 		--workdir /infra \
 		$(TERRAFORM_DOCKER_IMAGE) $$action $(TERRAFORM_ARGS)
 

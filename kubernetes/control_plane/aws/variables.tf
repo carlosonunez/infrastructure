@@ -1,6 +1,12 @@
 variable "number_of_zones" {
   description = "The number of zones to use for this Kubernetes deployment."
 }
+variable "provisioning_machine_ip_address" {
+  description = "The IP address for the provisioning machine."
+}
+variable "environment_name" {
+  description = "The environment being provisioned."
+}
 
 variable "cidr_block_for_kubernetes_clusters" {
   description = "The CIDR block to use for Kubernetes clusters."
@@ -10,10 +16,6 @@ variable "cidr_block_for_kubernetes_clusters" {
 variable "domain_name" {
   description = "The domain under management."
   default = "carlosnunez.me"
-}
-
-variable "environment_name" {
-  description = "The environment being provisioned."
 }
 
 variable "additional_tags" {
@@ -29,5 +31,10 @@ variable "kubernetes_cluster_vpc_tags" {
 
 variable "kubernetes_cluster_subnet_tags" {
   description = "Tags to apply onto the subnets created for k8s clusters."
+  default = {}
+}
+
+variable "kubernetes_control_plane_security_group_tags" {
+  description = "Custom tags to use for the security group associated with the control plane"
   default = {}
 }
