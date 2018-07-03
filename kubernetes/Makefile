@@ -76,10 +76,8 @@ terraform_%:
 		--env AWS_ACCESS_KEY_ID \
 		--env AWS_SECRET_ACCESS_KEY \
 		--env AWS_REGION \
-		--env TF_VAR_provisioning_machine_ip_address $(THIS_IP_ADDRESS) \
 		--workdir /infra \
 		$(TERRAFORM_DOCKER_IMAGE) $$action $(TERRAFORM_ARGS)
-
 
 .PHONY: \
 	build_tools_image \
@@ -98,3 +96,8 @@ test_tools_image:
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests
+
+.PHONY: get_this_machines_external_ip_address
+
+get_this_machines_external_ip_address:
+	curl -sL 'https://api.ipify.org?format=text' || exit 1
