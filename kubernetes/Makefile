@@ -48,7 +48,7 @@ destroy_cluster:
 	$(MAKE) terraform_destroy
 
 deploy_tools_image:
-	$(MAKE) create_tools_image && \
+	$(MAKE) build_tools_image && \
 	$(MAKE) test_tools_image
 
 .PHONY: configure_terraform lint_terraform terraform_%
