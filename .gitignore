@@ -4,6 +4,14 @@
 *.tfplan
 *.tfstate.lock
 terraform.tfvars
+!terraform.tfvars.template
+provider.tf
+backend.tf
+
+# Environment variable ignores
+.env.*
+env.*
+!.env.example
 
 # Ansible ignores
 *.retry
