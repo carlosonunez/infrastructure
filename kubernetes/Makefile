@@ -42,7 +42,8 @@ deploy_cluster:
 	$(MAKE) configure_terraform && \
 	$(MAKE) terraform_init > /dev/null && \
 	$(MAKE) terraform_validate && \
-	$(MAKE) terraform_plan
+	$(MAKE) terraform_plan && \
+	$(MAKE) terraform_deploy
 
 destroy_cluster:
 	$(MAKE) terraform_destroy
