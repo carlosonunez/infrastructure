@@ -56,3 +56,8 @@ variable "kubernetes_control_plane_tags" {
     "kubernetes_node_type" = "master"
   }
 }
+
+variable "kubernetes_node_spot_price" {
+  description = "The price to bid for our Kubernetes nodes."
+  default     = "0.03"
+}
