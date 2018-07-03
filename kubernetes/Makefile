@@ -47,12 +47,7 @@ deploy_tools_image:
 .PHONY: configure_terraform
 
 configure_terraform:
-	AWS_REGION=$(AWS_REGION) \
-	AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) \
-	AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) \
-	TERRAFORM_STATE_S3_BUCKET=$(TERRAFORM_STATE_S3_BUCKET) \
-	TERRAFORM_STATE_S3_KEY=$(TERRAFORM_STATE_S3_KEY) \
-	$(SCRIPTS_PATH)/create_terraform_configuration.sh
+	ENV_FILE=.env $(SCRIPTS_PATH)/create_terraform_configuration.sh
 
 .PHONY: \
 	build_tools_image \
