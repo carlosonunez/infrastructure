@@ -7,9 +7,6 @@ variable "provisioning_machine_ip_address" {
 variable "environment_name" {
   description = "The environment being provisioned."
 }
-variable "kubernetes_node_ami_id" {
-  description = "The AMI id to use for *all* Kubernetes nodes."
-}
 variable "kubernetes_node_instance_type" {
   description = <<EOF
 The instance type to use for Kubernetes nodes.
