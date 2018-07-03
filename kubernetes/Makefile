@@ -1,12 +1,36 @@
 #!/usr/bin/env make
 MAKEFLAGS += '--silent'
 
+ifeq ($(AWS_ACCESS_KEY_ID),)
+$(error "Please provide an access key to an AWS account.")
+endif
+ifeq ($(AWS_SECRET_ACCESS_KEY),)
+$(error "Please provide a secret key to an AWS account.")
+endif
+
+AWS_REGION ?= us-east-1
 DOCKER_USERNAME ?= carlosonunez
 BATS_DOCKER_IMAGE ?= graze/bats
 CONTROL_INSTANCE_DOCKER_IMAGE_TAG ?= kubernetes_control_instance
 CONTROL_INSTANCE_DOCKER_IMAGE_NAME := $(DOCKER_USERNAME)/$(CONTROL_INSTANCE_DOCKER_IMAGE_TAG)
 CONTROL_INSTANCE_SOURCE_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/control_instance")
+KUBERNETES_AVAILABILITY_ZONE_COUNT ?= 3
+ENVIRONMENT_NAME ?= develop
+
+.PHONY: \
+	validate_helper_scripts \
+	test_helper_scripts \
+	validate_terraform \
+	test_terraform
+
+.PHONY: \
+	create_terraform_configuration \
+	terraform_init \
+	terraform_get \
+	terraform_lint \
+	terraform_plan \
+	terraform_destroy
 
 .PHONY: \
 	generate_control_instance_docker_image \
