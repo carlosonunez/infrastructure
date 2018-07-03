@@ -15,22 +15,23 @@ CONTROL_INSTANCE_DOCKER_IMAGE_TAG ?= kubernetes_control_instance
 CONTROL_INSTANCE_DOCKER_IMAGE_NAME := $(DOCKER_USERNAME)/$(CONTROL_INSTANCE_DOCKER_IMAGE_TAG)
 CONTROL_INSTANCE_SOURCE_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/control_instance")
+CONTROL_PLANE_SOURCE_PATH := $(shell \
+	echo "$$(git rev-parse --show-toplevel)/kubernetes/control_plane")
+SCRIPTS_PATH := $(shell \
+	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
 NUMBER_OF_AVAILABILITY_ZONES ?= 3
 ENVIRONMENT_NAME ?= develop
 
-.PHONY: \
-	validate_helper_scripts \
-	test_helper_scripts \
-	validate_terraform \
-	test_terraform
+.PHONY: deploy_cluster
 
-.PHONY: \
-	create_terraform_configuration \
-	terraform_init \
-	terraform_get \
-	terraform_lint \
-	terraform_plan \
-	terraform_destroy
+deploy_cluster:
+	$(MAKE) configure_terraform
+
+.PHONY: configure_terraform
+
+configure_terraform:
+	$(CONTROL_INSTANCE_SOURCE_PATH)/include
+
 
 .PHONY: \
 	generate_control_instance_docker_image \
