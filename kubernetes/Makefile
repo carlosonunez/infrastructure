@@ -23,6 +23,7 @@ endif
 
 AWS_REGION ?= us-east-1
 DOCKER_HUB_USERNAME ?= carlosonunez
+DRY_RUN ?= false
 BATS_DOCKER_IMAGE ?= graze/bats
 TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
 KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
@@ -42,8 +43,12 @@ deploy_cluster:
 	$(MAKE) configure_terraform && \
 	$(MAKE) terraform_init > /dev/null && \
 	$(MAKE) terraform_validate && \
-	$(MAKE) terraform_plan && \
-	$(MAKE) terraform_deploy
+	if [ "$(DRY_RUN)" == "true" ]; \
+	then \
+		$(MAKE) terraform_plan; \
+	else \
+		$(MAKE) terraform_apply; \
+	fi
 
 destroy_cluster:
 	$(MAKE) terraform_destroy
