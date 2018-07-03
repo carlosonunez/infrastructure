@@ -7,6 +7,9 @@ variable "provisioning_machine_ip_address" {
 variable "environment_name" {
   description = "The environment being provisioned."
 }
+variable "kubernetes_node_ami_id" {
+  description = "The AMI id to use for *all* Kubernetes nodes."
+}
 
 variable "cidr_block_for_kubernetes_clusters" {
   description = "The CIDR block to use for Kubernetes clusters."
