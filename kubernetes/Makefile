@@ -9,9 +9,11 @@ $(error Please provide a secret key to an AWS account)
 endif
 
 AWS_REGION ?= us-east-1
-DOCKER_USERNAME ?= carlosonunez
+DOCKER_HUB_USERNAME ?= carlosonunez
 BATS_DOCKER_IMAGE ?= graze/bats
 KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
+NUMBER_OF_AVAILABILITY_ZONES ?= 3
+ENVIRONMENT_NAME ?= develop
 KUBERNETES_TOOLS_IMAGE_NAME := $(DOCKER_USERNAME)/$(KUBERNETES_TOOLS_DOCKER_IMAGE_TAG)
 KUBERNETES_TOOLS_SOURCE_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/tools")
@@ -19,8 +21,6 @@ CONTROL_PLANE_SOURCE_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/control_plane")
 SCRIPTS_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
-NUMBER_OF_AVAILABILITY_ZONES ?= 3
-ENVIRONMENT_NAME ?= develop
 
 .PHONY: deploy_cluster deploy_tools_image
 

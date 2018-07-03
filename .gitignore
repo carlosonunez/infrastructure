@@ -12,6 +12,7 @@ backend.tf
 .env.*
 env.*
 !.env.example
+!env.tar.enc
 
 # Ansible ignores
 *.retry
