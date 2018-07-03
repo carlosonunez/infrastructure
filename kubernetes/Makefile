@@ -40,6 +40,7 @@ SCRIPTS_PATH := $(shell \
 
 deploy_cluster:
 	$(MAKE) configure_terraform && \
+	$(MAKE) terraform_init && \
 	$(MAKE) terraform_validate
 
 deploy_tools_image:
@@ -56,6 +57,9 @@ terraform_%:
 	>&2 echo "The action to take: $$action"; \
 	docker run --volume "$(CONTROL_PLANE_SOURCE_PATH)/aws:/infra" \
 		--env-file .env \
+		--env AWS_ACCESS_KEY_ID \
+		--env AWS_SECRET_ACCESS_KEY \
+		--env AWS_REGION \
 		--workdir /infra \
 		$(TERRAFORM_DOCKER_IMAGE) $$action $(TERRAFORM_ARGS)
 

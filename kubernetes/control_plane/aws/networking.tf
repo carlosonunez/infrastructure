@@ -13,8 +13,8 @@ resource "aws_internet_gateway" "kubernetes_clusters" {
 resource "aws_subnet" "kubernetes_clusters" {
   count = "${var.number_of_zones}"
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
-  availability_zone = "${data.aws_availability_zones.available.names[count.index]}"
-  cidr_block = "${local.subnets.cidr_blocks.first}"
+  availability_zone = "${data.aws_availability_zones.available_to_this_account.names[count.index]}"
+  cidr_block = "${local.subnet_cidr_blocks[count.index]}"
   map_public_ip_on_launch = true
   tags = "${merge(local.aws_tags, var.kubernetes_cluster_subnet_tags)}"
 }

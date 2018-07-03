@@ -16,15 +16,6 @@ variable "environment_name" {
   description = "The environment being provisioned."
 }
 
-variable "default_tags" {
-  description = "Default tags to append onto every resource that supports tagging."
-  type = "map"
-  default = {
-    Domain = "${var.domain_name}"
-    Environment = "${var.environment_name}"
-  }
-}
-
 variable "additional_tags" {
   description = "Additional tags to append onto resources that support tagging."
   type = "map"
