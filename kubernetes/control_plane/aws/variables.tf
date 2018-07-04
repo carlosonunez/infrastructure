@@ -7,6 +7,24 @@ variable "provisioning_machine_ip_address" {
 variable "environment_name" {
   description = "The environment being provisioned."
 }
+variable "kubernetes_cluster_public_key" {
+  description = "The public key to use for the SSH key provisioned for Kubernetes nodes."
+}
+
+variable "kubernetes_node_ami" {
+  description = "The AMI to use for Kubernetes nodes."
+  default = "ami-5cc39523"
+}
+variable "kubernetes_nodes_spot_price" {
+  description = "The spot price to set for Kubernetes nodes."
+  default = "0.03"
+}
+
+variable "search_for_packer_generated_amis" {
+  description = "Set this to use Packer-generated AMIs instead of the default Ubuntu AMI."
+  default = false
+}
+
 variable "kubernetes_node_instance_type" {
   description = <<EOF
 The instance type to use for Kubernetes nodes.
