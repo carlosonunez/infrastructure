@@ -13,7 +13,6 @@ USER root
 RUN for package in cfssl cfssljson; \
   do \
     curl --output "/usr/local/bin/$package" \
-      --silent \
       --location \
       "http://pkg.cfssl.org/R${CERT_UTILS_VERSION}/${package}_linux-amd64" && \
     chmod +x "/usr/local/bin/$package"; \
@@ -21,7 +20,6 @@ RUN for package in cfssl cfssljson; \
 
 # Install kubectl so you can do stuff with the k8s control plane
 RUN curl --output /usr/local/bin/kubectl \
-    --silent \
     --location \
     https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl && \
   chmod +x /usr/local/bin/kubectl
