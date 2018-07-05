@@ -17,7 +17,7 @@ variable "kubernetes_node_ami" {
 }
 variable "kubernetes_nodes_spot_price" {
   description = "The spot price to set for Kubernetes nodes."
-  default = "0.03"
+  default = "0.0145"
 }
 
 variable "search_for_packer_generated_amis" {
