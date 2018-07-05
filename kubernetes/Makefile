@@ -48,6 +48,8 @@ SCRIPTS_PATH := $(shell \
 	destroy_cluster
 
 deploy_cluster:
+	$(MAKE) deploy_tools_image && \
+	$(MAKE) initialize_cert_authority && \
 	$(MAKE) configure_terraform && \
 	TERRAFORM_ARGS=-force-copy $(MAKE) terraform_init && \
 	$(MAKE) terraform_validate && \
@@ -124,7 +126,9 @@ test_tools_image:
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests
 
-.PHONY: get_this_machines_external_ip_address
+.PHONY: initialize_cert_authority
 
-get_this_machines_external_ip_address:
-	curl -sL 'https://api.ipify.org?format=text' || exit 1
+initialize_cert_authority:
+	DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
+		 ENV_FILE=.env \
+		 $(SCRIPTS_PATH)/initialize_cert_authority.sh
