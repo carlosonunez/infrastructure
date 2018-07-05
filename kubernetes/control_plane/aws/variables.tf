@@ -71,3 +71,10 @@ variable "kubernetes_control_plane_tags" {
     "kubernetes_node_type" = "master"
   }
 }
+
+variable "kubernetes_worker_tags" {
+  description = "Tags to use for Kubernetes nodes."
+  default = {
+    "kubernetes_node_type" = "worker"
+  }
+}
