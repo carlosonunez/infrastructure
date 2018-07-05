@@ -10,7 +10,7 @@ RUN apk add --update-cache $(echo "$EXTRA_BINARIES" | tr ',' ' ')
 
 # Install cfssl and cfjson for creating a PKI and creating certificate with it.
 USER root
-RUN for package in cfssl cfjson; \
+RUN for package in cfssl cfssljson; \
   do \
     curl --output "/usr/local/bin/$package" \
       --silent \
@@ -26,6 +26,10 @@ RUN curl --output /usr/local/bin/kubectl \
     https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl && \
   chmod +x /usr/local/bin/kubectl
 
+# Create a scratch directory
+RUN mkdir /scratch && chown 1000 /scratch
+
 # Make the entrypoint bash
 USER 1000
+WORKDIR /scratch
 ENTRYPOINT bash

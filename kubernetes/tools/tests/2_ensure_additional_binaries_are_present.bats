@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 @test "Ensure that required packages are present" {
-  for package in jq curl
+  for package in jq curl cfssl cfssljson
   do
     expected_exit_code=0
     run bash -c "docker run --entrypoint bash  \
