@@ -39,7 +39,13 @@ CONTROL_PLANE_SOURCE_PATH := $(shell \
 SCRIPTS_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
 
-.PHONY: deploy_cluster deploy_tools_image
+.PHONY: \
+	deploy_cluster \
+	deploy_tools_image \
+	get_cluster_addresses \
+	get_control_plane_addresses \
+	get_worker_addresses \
+	destroy_cluster
 
 deploy_cluster:
 	$(MAKE) configure_terraform && \
@@ -47,11 +53,23 @@ deploy_cluster:
 	$(MAKE) terraform_validate && \
 	$(MAKE) deploy_terraform_plan
 
-destroy_cluster: destroy_terraform_plan
-
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
 	$(MAKE) test_tools_image
+
+destroy_cluster: destroy_terraform_plan
+
+get_cluster_addresses:
+	TERRAFORM_ARGS="-json" $(MAKE) terraform_output | \
+		jq -r 'to_entries[] | .key + ":" + .value.value[]' | \
+		sed 's/kubernetes_control_plane_ip_addresses/master/' | \
+		sed 's/kubernetes_workers_ip_addresses/worker/'
+
+get_worker_addresses:
+	$(MAKE) get_cluster_addresses | grep 'worker'
+
+get_control_plane_addresses:
+	$(MAKE) get_cluster_addresses | grep 'master'
 
 .PHONY: \
 	configure_terraform \
