@@ -23,6 +23,10 @@ resource "aws_spot_instance_request" "kubernetes_control_plane" {
   }
 }
 
+output "kubernetes_control_plane_ip_addresses" {
+  value = "${aws_spot_instance_request.kubernetes_control_plane.*.public_ip}"
+}
+
 resource "aws_spot_instance_request" "kubernetes_workers" {
   count = "${var.number_of_zones * var.number_of_workers_per_cluster}"
   spot_price = "${var.kubernetes_nodes_spot_price}"
@@ -42,3 +46,8 @@ resource "aws_spot_instance_request" "kubernetes_workers" {
     delete_on_termination = true
   }
 }
+
+output "kubernetes_workers_ip_addresses" {
+  value = "${aws_spot_instance_request.kubernetes_workers.*.public_ip}"
+}
+
