@@ -1,4 +1,6 @@
 number_of_zones="$NUMBER_OF_AVAILABILITY_ZONES"
+number_of_masters_per_control_plane="$NUMBER_OF_AVAILABILITY_ZONES"
+number_of_workers_per_cluster="$NUMBER_OF_WORKERS_PER_CLUSTER"
 cidr_block_for_kubernetes_clusters="$KUBERNETES_CLUSTER_CIDR_BLOCKS"
 domain_name="$DOMAIN_NAME"
 environment_name="$ENVIRONMENT_NAME"

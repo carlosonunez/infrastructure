@@ -10,11 +10,13 @@ variable "environment_name" {
 variable "kubernetes_cluster_public_key" {
   description = "The public key to use for the SSH key provisioned for Kubernetes nodes."
 }
-
+variable "number_of_masters_per_control_plane" {
+  description = "The number of masters to deploy per control plane. This cannot exceed number_of_zones."
+}
 variable "number_of_workers_per_cluster" {
   description = "The number of workers to provision per cluster."
-  default = 2
 }
+
 variable "kubernetes_node_ami" {
   description = "The AMI to use for Kubernetes nodes."
   default = "ami-5cc39523"
@@ -59,7 +61,12 @@ variable "kubernetes_cluster_vpc_tags" {
   default = {}
 }
 
-variable "kubernetes_cluster_subnet_tags" {
+variable "kubernetes_control_plane_subnet_tags" {
+  description = "Tags to apply onto the subnets created for k8s clusters."
+  default = {}
+}
+
+variable "kubernetes_worker_subnet_tags" {
   description = "Tags to apply onto the subnets created for k8s clusters."
   default = {}
 }

@@ -43,7 +43,7 @@ SCRIPTS_PATH := $(shell \
 
 deploy_cluster:
 	$(MAKE) configure_terraform && \
-	$(MAKE) terraform_init && \
+	TERRAFORM_ARGS=-force-copy $(MAKE) terraform_init && \
 	$(MAKE) terraform_validate && \
 	$(MAKE) deploy_terraform_plan
 
