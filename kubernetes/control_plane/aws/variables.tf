@@ -11,6 +11,10 @@ variable "kubernetes_cluster_public_key" {
   description = "The public key to use for the SSH key provisioned for Kubernetes nodes."
 }
 
+variable "number_of_workers_per_cluster" {
+  description = "The number of workers to provision per cluster."
+  default = 2
+}
 variable "kubernetes_node_ami" {
   description = "The AMI to use for Kubernetes nodes."
   default = "ami-5cc39523"

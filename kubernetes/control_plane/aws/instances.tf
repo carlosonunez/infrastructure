@@ -19,7 +19,7 @@ resource "aws_spot_instance_request" "kubernetes_control_plane" {
 }
 
 resource "aws_spot_instance_request" "kubernetes_workers" {
-  count = "${var.number_of_zones}"
+  count = "${var.number_of_workers_per_cluster}"
   spot_price = "${var.kubernetes_nodes_spot_price}"
   instance_type = "${var.kubernetes_node_instance_type}"
   ami = "${var.kubernetes_node_ami}"
@@ -27,7 +27,7 @@ resource "aws_spot_instance_request" "kubernetes_workers" {
   ebs_optimized = false
   key_name = "${aws_key_pair.kubernetes_cluster.key_name}"
   vpc_security_group_ids = [ "${aws_security_group.kubernetes_clusters.id}" ]
-  subnet_id = "${aws_subnet.kubernetes_clusters.*.id[count.index]}"
+  subnet_id = "${aws_subnet.kubernetes_workers.*.id[count.index]}"
   associate_public_ip_address = true
   tags = "${merge(local.aws_tags, var.kubernetes_worker_tags)}"
   wait_for_fulfillment = "true"
