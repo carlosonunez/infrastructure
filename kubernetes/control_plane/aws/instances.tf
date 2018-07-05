@@ -15,4 +15,5 @@ resource "aws_spot_instance_request" "kubernetes_control_plane" {
   subnet_id = "${aws_subnet.kubernetes_clusters.*.id[count.index]}"
   associate_public_ip_address = true
   tags = "${merge(local.aws_tags, var.kubernetes_control_plane_tags)}"
+  wait_for_fulfillment = "true"
 }
