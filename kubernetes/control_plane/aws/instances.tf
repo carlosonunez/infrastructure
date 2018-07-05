@@ -16,6 +16,11 @@ resource "aws_spot_instance_request" "kubernetes_control_plane" {
   associate_public_ip_address = true
   tags = "${merge(local.aws_tags, var.kubernetes_control_plane_tags)}"
   wait_for_fulfillment = "true"
+  root_block_device {
+    volume_type = "gp2"
+    volume_size = 32
+    delete_on_termination = true
+  }
 }
 
 resource "aws_spot_instance_request" "kubernetes_workers" {
@@ -31,4 +36,9 @@ resource "aws_spot_instance_request" "kubernetes_workers" {
   associate_public_ip_address = true
   tags = "${merge(local.aws_tags, var.kubernetes_worker_tags)}"
   wait_for_fulfillment = "true"
+  root_block_device {
+    volume_type = "gp2"
+    volume_size = 32
+    delete_on_termination = true
+  }
 }
