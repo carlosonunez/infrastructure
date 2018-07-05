@@ -10,15 +10,6 @@ resource "aws_internet_gateway" "kubernetes_clusters" {
   tags = "${merge(local.aws_tags, var.kubernetes_cluster_vpc_tags)}"
 }
 
-resource "aws_subnet" "kubernetes_clusters" {
-  count = "${var.number_of_zones}"
-  vpc_id = "${aws_vpc.kubernetes_clusters.id}"
-  availability_zone = "${data.aws_availability_zones.available_to_this_account.names[count.index]}"
-  cidr_block = "${local.subnet_cidr_blocks[count.index]}"
-  map_public_ip_on_launch = true
-  tags = "${merge(local.aws_tags, var.kubernetes_cluster_subnet_tags)}"
-}
-
 resource "aws_route_table" "kubernetes_clusters" {
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
   route {
@@ -27,8 +18,32 @@ resource "aws_route_table" "kubernetes_clusters" {
   }
 }
 
-resource "aws_route_table_association" "kubernetes_clusters" {
+resource "aws_subnet" "kubernetes_control_plane" {
   count = "${var.number_of_zones}"
-  subnet_id = "${aws_subnet.kubernetes_clusters.*.id[count.index]}"
+  vpc_id = "${aws_vpc.kubernetes_clusters.id}"
+  availability_zone = "${data.aws_availability_zones.available_to_this_account.names[count.index]}"
+  cidr_block = "${local.subnet_cidr_blocks[count.index]}"
+  map_public_ip_on_launch = true
+  tags = "${merge(local.aws_tags, var.kubernetes_control_plane_subnet_tags)}"
+}
+
+resource "aws_route_table_association" "kubernetes_control_plane" {
+  count = "${var.number_of_zones}"
+  subnet_id = "${aws_subnet.kubernetes_control_plane.*.id[count.index]}"
+  route_table_id = "${aws_route_table.kubernetes_clusters.id}"
+}
+
+resource "aws_subnet" "kubernetes_workers" {
+  count = "${var.number_of_zones}"
+  vpc_id = "${aws_vpc.kubernetes_clusters.id}"
+  availability_zone = "${data.aws_availability_zones.available_to_this_account.names[count.index]}"
+  cidr_block = "${local.worker_subnet_cidr_blocks[count.index]}"
+  map_public_ip_on_launch = true
+  tags = "${merge(local.aws_tags, var.kubernetes_worker_subnet_tags)}"
+}
+
+resource "aws_route_table_association" "kubernetes_workers" {
+  count = "${var.number_of_zones}"
+  subnet_id = "${aws_subnet.kubernetes_workers.*.id[count.index]}"
   route_table_id = "${aws_route_table.kubernetes_clusters.id}"
 }

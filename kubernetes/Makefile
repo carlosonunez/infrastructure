@@ -1,5 +1,6 @@
 #!/usr/bin/env make
-MAKEFLAGS += '--silent'
+MAKEFLAGS += --always-make
+MAKEFLAGS += --silent
 SHELL := /usr/bin/env bash
 
 ifeq ("$(wildcard .env)","")
@@ -24,7 +25,7 @@ endif
 
 AWS_REGION ?= us-east-1
 DOCKER_HUB_USERNAME ?= carlosonunez
-DRY_RUN ?= "false"
+DRY_RUN ?= false
 BATS_DOCKER_IMAGE ?= graze/bats
 TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
 KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
@@ -38,39 +39,49 @@ CONTROL_PLANE_SOURCE_PATH := $(shell \
 SCRIPTS_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
 
-.PHONY: deploy_cluster deploy_tools_image
+.PHONY: \
+	deploy_cluster \
+	deploy_tools_image \
+	get_cluster_addresses \
+	get_control_plane_addresses \
+	get_worker_addresses \
+	destroy_cluster
 
 deploy_cluster:
-	set -e; \
 	$(MAKE) configure_terraform && \
-	$(MAKE) terraform_init > /dev/null && \
+	TERRAFORM_ARGS=-force-copy $(MAKE) terraform_init && \
 	$(MAKE) terraform_validate && \
-	if [ "$(DRY_RUN)" == "true" ]; \
-	then \
-		$(MAKE) terraform_plan; \
-	else \
-		TERRAFORM_ARGS="-auto-approve" $(MAKE) terraform_apply; \
-	fi
-
-destroy_cluster:
-	if [ "$(DRY_RUN)" == "true" ]; \
-	then \
-		$(MAKE) terraform_destroy; \
-	else \
-		TERRAFORM_ARGS=-auto-approve $(MAKE) terraform_destroy; \
-	fi
+	$(MAKE) deploy_terraform_plan
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
 	$(MAKE) test_tools_image
 
-.PHONY: configure_terraform lint_terraform terraform_%
+destroy_cluster: destroy_terraform_plan
+
+get_cluster_addresses:
+	TERRAFORM_ARGS="-json" $(MAKE) terraform_output | \
+		jq -r 'to_entries[] | .key + ":" + .value.value[]' | \
+		sed 's/kubernetes_control_plane_ip_addresses/master/' | \
+		sed 's/kubernetes_workers_ip_addresses/worker/'
+
+get_worker_addresses:
+	$(MAKE) get_cluster_addresses | grep 'worker'
+
+get_control_plane_addresses:
+	$(MAKE) get_cluster_addresses | grep 'master'
+
+.PHONY: \
+	configure_terraform \
+	terraform_% \
+	deploy_terraform_plan \
+	destroy_terraform_plan
 
 configure_terraform:
 	ENV_FILE=.env $(SCRIPTS_PATH)/create_terraform_configuration.sh
 
 terraform_%:
-	action=$$(echo $@ | sed 's/terraform_//'); \
+	action=$$(echo $@ | sed 's/terraform_//') && \
 	docker run --volume "$(CONTROL_PLANE_SOURCE_PATH)/aws:/infra" \
 		--env-file .env \
 		--env AWS_ACCESS_KEY_ID \
@@ -79,6 +90,21 @@ terraform_%:
 		--workdir /infra \
 		$(TERRAFORM_DOCKER_IMAGE) $$action $(TERRAFORM_ARGS)
 
+deploy_terraform_plan:
+	if [ "$(DRY_RUN)" == "true" ]; \
+	then \
+		$(MAKE) terraform_plan; \
+	else \
+		TERRAFORM_ARGS="-auto-approve" $(MAKE) terraform_apply; \
+	fi
+
+destroy_terraform_plan:
+	if [ "$(DRY_RUN)" == "true" ]; \
+	then \
+		$(MAKE) terraform_destroy; \
+	else \
+		TERRAFORM_ARGS=-auto-approve $(MAKE) terraform_destroy; \
+	fi
 
 .PHONY: \
 	build_tools_image \
@@ -97,3 +123,8 @@ test_tools_image:
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests
+
+.PHONY: get_this_machines_external_ip_address
+
+get_this_machines_external_ip_address:
+	curl -sL 'https://api.ipify.org?format=text' || exit 1
