@@ -31,7 +31,7 @@ The instance type to use for Kubernetes nodes.
 Because Kubernetes is memory-intensive, we recommend using a memory-optimized
 instance, such as an m* series.
 EOF
-  default = "m3.medium"
+  default = "t2.medium"
 }
 
 variable "cidr_block_for_kubernetes_clusters" {
@@ -70,9 +70,4 @@ variable "kubernetes_control_plane_tags" {
   default = {
     "kubernetes_node_type" = "master"
   }
-}
-
-variable "kubernetes_node_spot_price" {
-  description = "The price to bid for our Kubernetes nodes."
-  default     = "0.03"
 }
