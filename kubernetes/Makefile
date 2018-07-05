@@ -114,10 +114,10 @@ destroy_terraform_plan:
 	deploy_tools_image
 
 build_tools_image:
+	>&2 echo "INFO: Building image $(KUBERNETES_TOOLS_IMAGE_NAME)"; \
 	docker build -t $(KUBERNETES_TOOLS_IMAGE_NAME) \
 		-f $(KUBERNETES_TOOLS_SOURCE_PATH)/Dockerfile \
-		--quiet \
-		$(KUBERNETES_TOOLS_SOURCE_PATH) > /dev/null
+		$(KUBERNETES_TOOLS_SOURCE_PATH)
 
 test_tools_image:
 	docker run --volume $(KUBERNETES_TOOLS_SOURCE_PATH):/app \
