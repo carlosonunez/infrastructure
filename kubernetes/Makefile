@@ -57,7 +57,8 @@ deploy_cluster:
 	$(MAKE) copy_worker_certificates && \
 	$(MAKE) copy_control_plane_certificates && \
 	$(MAKE) generate_kubeconfigs && \
-	$(MAKE) generate_data_encryption_config_and_key
+	$(MAKE) generate_data_encryption_config_and_key && \
+	$(MAKE) bootstrap_etcd_cluster
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -69,7 +70,19 @@ destroy_cluster: destroy_terraform_plan
 	generate_base_certificates \
 	copy_%_certificates \
 	generate_kubeconfigs \
-	generate_data_encryption_config_and_key
+	generate_data_encryption_config_and_key \
+	bootstrap_etcd_cluster
+
+bootstrap_etcd_cluster:
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	initial_etcd_cluster=$$($(MAKE) get_initial_etcd_cluster_addresses | tr "\n" ','); \
+	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER=$$initial_etcd_cluster \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/bootstrap_etcd_cluster.sh
 
 generate_data_encryption_config_and_key:
 	>&2 echo "INFO: Obtaining cluster IP addresses. Hang on a sec."; \
@@ -165,7 +178,17 @@ generate_base_certificates:
 	get_cluster_addresses \
 	get_control_plane_addresses \
 	get_worker_addresses \
-	get_lb_address
+	get_lb_address \
+	get_initial_etcd_cluster_addresses
+
+get_initial_etcd_cluster_addresses:
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/get_initial_etcd_cluster_addresses.sh
 
 get_cluster_addresses:
 	TERRAFORM_ARGS="-json" $(MAKE) terraform_output | \
