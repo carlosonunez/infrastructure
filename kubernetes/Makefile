@@ -31,6 +31,7 @@ TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
 KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
 NUMBER_OF_AVAILABILITY_ZONES ?= 3
 ENVIRONMENT_NAME ?= develop
+SSH_DELAY_IN_SECONDS ?= 45
 KUBERNETES_TOOLS_IMAGE_NAME := $(DOCKER_HUB_USERNAME)/$(KUBERNETES_TOOLS_DOCKER_IMAGE_TAG)
 KUBERNETES_TOOLS_SOURCE_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/tools")
@@ -38,22 +39,23 @@ CONTROL_PLANE_SOURCE_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/control_plane")
 SCRIPTS_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
+PRIVATE_KEY_PATH_VARIABLE := temporary_key_path
 
 .PHONY: \
 	deploy_cluster \
 	deploy_tools_image \
-	get_cluster_addresses \
-	get_control_plane_addresses \
-	get_worker_addresses \
 	destroy_cluster
 
 deploy_cluster:
 	$(MAKE) deploy_tools_image && \
-	$(MAKE) initialize_cert_authority && \
+	$(MAKE) generate_base_certificates && \
 	$(MAKE) configure_terraform && \
 	TERRAFORM_ARGS=-force-copy $(MAKE) terraform_init && \
 	$(MAKE) terraform_validate && \
-	$(MAKE) deploy_terraform_plan
+	$(MAKE) deploy_terraform_plan && \
+	$(MAKE) wait_for_ssh && \
+	$(MAKE) copy_worker_certificates && \
+	$(MAKE) copy_control_plane_certificates
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -61,11 +63,87 @@ deploy_tools_image:
 
 destroy_cluster: destroy_terraform_plan
 
+.PHONY: \
+	generate_base_certificates \
+	copy_%_certificates
+
+copy_%_certificates:
+	node_type=$$(echo $@ | sed 's/copy_\(.*\)_certificates/\1/'); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	case "$$node_type" in \
+		worker) \
+			>&2 echo "INFO: Getting $${node_type} IP addresses; this might take a while."; \
+			target_to_invoke="get_$${node_type}_addresses"; \
+			if ! addresses=$$($(MAKE) "$$target_to_invoke"); \
+			then \
+				>&2 echo "ERROR: Failed to retrieve IP addresses; stopping."; \
+				exit 1; \
+			fi; \
+			number_of_workers=$$(echo "$$addresses" | wc -l | tr -d ' '); \
+			>&2 echo "INFO: This cluster has $$number_of_workers workers to copy certs to."; \
+			for ip_address_data in $$addresses; \
+			do \
+				ip_address=$$(echo "$$ip_address_data" | cut -f2 -d ':'); \
+				if ! NODE_TYPE="$$node_type" \
+					KUBELET_IP_ADDRESS="$$ip_address" \
+					ENV_FILE=.env \
+					DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
+					SSH_USER_NAME=$(SSH_USER_NAME) \
+					SSH_PRIVATE_KEY_PATH=$$private_key_path \
+					$(SCRIPTS_PATH)/copy_certificates.sh; \
+				then \
+					>&2 echo "ERROR: Failed to copy certificates to $$IP_ADDRESS"; \
+					exit 1; \
+				fi; \
+			done \
+			;; \
+		control_plane) \
+			>&2 echo "INFO: Getting $${node_type} IP addresses; this might take a while."; \
+			if ! ip_addresses=$$($(MAKE) get_$${node_type}_addresses | \
+				sed 's/master://' | \
+				tr '\n' ',' \
+			); \
+			then \
+				>&2 echo "ERROR: Failed to retrieve IP addresses; stopping." ; \
+				exit 1; \
+			fi; \
+			lb_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
+			if ! NODE_TYPE="$$node_type" \
+				KUBERNETES_MASTER_IP_ADDRESSES="$$ip_addresses" \
+				KUBERNETES_MASTER_LB_IP_ADDRESS="$$lb_address" \
+				ENV_FILE=.env \
+				DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
+				SSH_USER_NAME=$(SSH_USER_NAME) \
+				SSH_PRIVATE_KEY_PATH=$$private_key_path \
+				$(SCRIPTS_PATH)/copy_certificates.sh; \
+			then \
+				>&2 echo "ERROR: Failed to copy certificates to the control plane nodes."; \
+				exit 1; \
+			fi; \
+			;; \
+		*) \
+			>&2 echo "ERROR: Unexpected type $$node_type"; \
+			exit 1; \
+			;; \
+	esac
+
+generate_base_certificates:
+	DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
+		 ENV_FILE=.env \
+		 $(SCRIPTS_PATH)/generate_base_certificates.sh
+
+.PHONY: \
+	get_cluster_addresses \
+	get_control_plane_addresses \
+	get_worker_addresses \
+	get_lb_address
+
 get_cluster_addresses:
 	TERRAFORM_ARGS="-json" $(MAKE) terraform_output | \
-		jq -r 'to_entries[] | .key + ":" + .value.value[]' | \
+		jq -r 'to_entries[] | if (.value.type == "string") then .key + ":" + .value.value else .key + ":" + .value.value[] end' |  \
 		sed 's/kubernetes_control_plane_ip_addresses/master/' | \
-		sed 's/kubernetes_workers_ip_addresses/worker/'
+		sed 's/kubernetes_workers_ip_addresses/worker/' | \
+		sed 's/kubernetes_control_plane_lb_ip_address/lb/'
 
 get_worker_addresses:
 	$(MAKE) get_cluster_addresses | grep 'worker'
@@ -73,14 +151,31 @@ get_worker_addresses:
 get_control_plane_addresses:
 	$(MAKE) get_cluster_addresses | grep 'master'
 
+get_lb_address:
+	$(MAKE) get_cluster_addresses | grep 'lb'
+
 .PHONY: \
 	configure_terraform \
+	get_private_key_path \
 	terraform_% \
 	deploy_terraform_plan \
-	destroy_terraform_plan
+	destroy_terraform_plan \
+	wait_for_ssh
+
+wait_for_ssh:
+	>&2 echo "Waiting $(SSH_DELAY_IN_SECONDS) seconds for hosts to accept SSH connections."; \
+	sleep $(SSH_DELAY_IN_SECONDS)
 
 configure_terraform:
-	ENV_FILE=.env $(SCRIPTS_PATH)/create_terraform_configuration.sh
+	PRIVATE_KEY_PATH_VARIABLE=$(PRIVATE_KEY_PATH_VARIABLE) \
+	ENV_FILE=.env \
+	$(SCRIPTS_PATH)/create_terraform_configuration.sh
+
+get_private_key_path:
+	cat $(CONTROL_PLANE_SOURCE_PATH)/aws/terraform.tfvars | \
+		grep -E "^$(PRIVATE_KEY_PATH_VARIABLE)" | \
+		cut -f2 -d "=" | \
+		tr -d '"'
 
 terraform_%:
 	action=$$(echo $@ | sed 's/terraform_//') && \
@@ -125,10 +220,3 @@ test_tools_image:
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests
-
-.PHONY: initialize_cert_authority
-
-initialize_cert_authority:
-	DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
-		 ENV_FILE=.env \
-		 $(SCRIPTS_PATH)/initialize_cert_authority.sh
