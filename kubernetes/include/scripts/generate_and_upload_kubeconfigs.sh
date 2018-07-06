@@ -149,7 +149,7 @@ _copy_matching_files_to_home_directory_on_remote_host() {
   public_ip_address="${1?Please provide a public IP address.}"
 	files_to_copy="${2?Please provide the files to copy.}"
 	scp -i "$SSH_PRIVATE_KEY_PATH" "$files_to_copy"\
-		"${SSH_USER_NAME}@$public_kubelet_ip_address":~/
+		"${SSH_USER_NAME}@$public_ip_address":~/
 }
 
 _copy_matching_files_to_all_kubernetes_controllers() {

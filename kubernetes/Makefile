@@ -56,7 +56,8 @@ deploy_cluster:
 	$(MAKE) wait_for_ssh && \
 	$(MAKE) copy_worker_certificates && \
 	$(MAKE) copy_control_plane_certificates && \
-	$(MAKE) generate_kubeconfigs
+	$(MAKE) generate_kubeconfigs && \
+	$(MAKE) generate_data_encryption_config_and_key
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -67,7 +68,18 @@ destroy_cluster: destroy_terraform_plan
 .PHONY: \
 	generate_base_certificates \
 	copy_%_certificates \
-	generate_kubeconfigs
+	generate_kubeconfigs \
+	generate_data_encryption_config_and_key
+
+generate_data_encryption_config_and_key:
+	>&2 echo "INFO: Obtaining cluster IP addresses. Hang on a sec."; \
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/create_data_encryption_key_and_config.sh
 
 generate_kubeconfigs:
 	>&2 echo "INFO: Obtaining cluster IP addresses. Hang on a sec."; \
