@@ -79,7 +79,9 @@ bootstrap_kubernetes_control_plane:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
 	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	initial_etcd_cluster=$$($(MAKE) get_initial_etcd_cluster_addresses | tr "\n" ',' | sed 's/.$$//'); \
 	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER=$$initial_etcd_cluster \
 		SSH_PRIVATE_KEY_PATH=$$private_key_path \
 		ENV_FILE=.env \
 		$(SCRIPTS_PATH)/bootstrap_kubernetes_control_plane.sh

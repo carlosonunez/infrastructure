@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source "$(git rev-parse --show-toplevel)/kubernetes/include/scripts/helpers/ssh.bash"
+source "$(git rev-parse --show-toplevel)/kubernetes/include/scripts/helpers/remote_systemd.bash"
 if [ -z "$ENV_FILE" ] || [ ! -f "$ENV_FILE" ]
 then
   >&2 echo "WARNING: No .env file was provided. Using local environment instead."
@@ -49,29 +50,29 @@ create_etcd_service() {
   >&2 echo "INFO: Creating the 'etcd' systemd service."
   temp_file=$(mktemp /tmp/etcd_service.XXXXXXXXX)
   temp_file_name=$(basename "$temp_file")
-  cat >"$temp_file" <<SYSTEMD_SERVICE
+  etcd_service_definition=$(cat <<SYSTEMD_SERVICE
 [Unit]
 Description=etcd
 Documentation=https://github.com/coreos
 
 [Service]
-ExecStart=/usr/local/bin/etcd \\
-  --name ETCD_NAME \\
-  --cert-file=/etc/etcd/kubernetes.pem \\
-  --key-file=/etc/etcd/kubernetes-key.pem \\
-  --peer-cert-file=/etc/etcd/kubernetes.pem \\
-  --peer-key-file=/etc/etcd/kubernetes-key.pem \\
-  --trusted-ca-file=/etc/etcd/ca.pem \\
-  --peer-trusted-ca-file=/etc/etcd/ca.pem \\
-  --peer-client-cert-auth \\
-  --client-cert-auth \\
-  --initial-advertise-peer-urls https://INTERNAL_IP:2380 \\
-  --listen-peer-urls https://INTERNAL_IP:2380 \\
-  --listen-client-urls https://INTERNAL_IP:2379,https://127.0.0.1:2379 \\
-  --advertise-client-urls https://INTERNAL_IP:2379 \\
-  --initial-cluster-token etcd-cluster-0 \\
-  --initial-cluster $KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER \\
-  --initial-cluster-state new \\
+ExecStart=/usr/local/bin/etcd \
+  --name ETCD_NAME \
+  --cert-file=/etc/etcd/kubernetes.pem \
+  --key-file=/etc/etcd/kubernetes-key.pem \
+  --peer-cert-file=/etc/etcd/kubernetes.pem \
+  --peer-key-file=/etc/etcd/kubernetes-key.pem \
+  --trusted-ca-file=/etc/etcd/ca.pem \
+  --peer-trusted-ca-file=/etc/etcd/ca.pem \
+  --peer-client-cert-auth \
+  --client-cert-auth \
+  --initial-advertise-peer-urls https://INTERNAL_IP:2380 \
+  --listen-peer-urls https://INTERNAL_IP:2380 \
+  --listen-client-urls https://INTERNAL_IP:2379,https://127.0.0.1:2379 \
+  --advertise-client-urls https://INTERNAL_IP:2379 \
+  --initial-cluster-token etcd-cluster-0 \
+  --initial-cluster $KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER \
+  --initial-cluster-state new \
   --data-dir=/var/lib/etcd
 Restart=on-failure
 RestartSec=5
@@ -79,20 +80,10 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 SYSTEMD_SERVICE
-  if ! _copy_matching_files_to_all_kubernetes_controllers "$temp_file"
-  then
-    >&2 echo "ERROR: Failed to copy file over to Kubernetes controllers."
-    return 1
-  fi
-  command_to_run=$(cat <<COPY_ETCD_SERVICE_AND_FILL_IN_TEMPLATE
-file_to_manipulate=/home/$SSH_USER_NAME/$temp_file_name; \
-sed -i "s/ETCD_NAME/\$(hostname -s)/g" "\$file_to_manipulate"; \
-sed -i "s/INTERNAL_IP/\$(hostname -i)/g" "\$file_to_manipulate"; \
-sudo cp "\$file_to_manipulate" /etc/systemd/system/etcd.service
-COPY_ETCD_SERVICE_AND_FILL_IN_TEMPLATE
 )
-  if ! _run_command_on_all_kubernetes_controllers "$command_to_run"
-  then
+  if ! _create_systemd_service_on_kubernetes_controllers "$etcd_service_definition" \
+    "etcd" \
+    "ETCD_NAME=\$(hostname -s)"
     >&2 echo "ERROR: Failed to create the service definition for etcd."
     return 1
   fi
