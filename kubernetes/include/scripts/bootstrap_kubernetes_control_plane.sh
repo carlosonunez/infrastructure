@@ -156,8 +156,55 @@ then
 fi
 }
 
+configure_kubernetes_default_scheduler() {
+  if ! _run_command_on_all_kubernetes_controllers \
+    "sudo cp kube-scheduler.kubeconfig /var/lib/kubernetes"
+  then
+    >&2 echo "ERROR: Unable to copy the scheduler configuration to /var/lib/kubernetes."
+    return 1
+  fi
+	temp_manifest_file=$(mktemp /tmp/scheduler_manifest.XXXXXXXX)
+  scheduler_manifest=$(cat >"$temp_manifest_file" <<SCHEDULER_MANIFEST
+apiVersion: componentconfig/v1alpha1
+kind: KubeSchedulerConfiguration
+clientConnection:
+  kubeconfig: "/var/lib/kubernetes/kube-scheduler.kubeconfig"
+leaderElection:
+  leaderElect: true
+SCHEDULER_MANIFEST
+)
+scheduler_service_definition=$(cat <<SERVICE_DEFINITION
+[Unit]
+Description=Kubernetes Scheduler
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-scheduler  \
+  --config=/etc/kubernetes/config/kube-scheduler.yaml  \
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_DEFINITION
+)
+	if ! {
+    _copy_matching_files_to_all_kubernetes_controllers "$temp_manifest_file" &&
+      _run_command_on_all_kubernetes_controllers \
+        "sudo mv ~/$(basename $temp_manifest_file) /etc/kubernetes/config/kube-scheduler.yaml" &&
+      _create_systemd_service_on_kubernetes_controllers "$scheduler_service_definition" \
+        "kube-scheduler"
+	}
+	then
+		>&2 echo "ERROR: Failed to configure the scheduler."
+    return 1
+  fi
+}
+
 #create_configuration_directory &&
 #download_kubernetes_binaries &&
 #initialize_kubernetes_api_server &&
 #create_kubernetes_api_server_service &&
-configure_kubernetes_controller_manager
+#configure_kubernetes_controller_manager &&
+configure_kubernetes_default_scheduler
