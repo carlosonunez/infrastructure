@@ -218,10 +218,46 @@ COMMANDS_TO_RUN
   fi
 }
 
+provision_web_server_for_health_checks() {
+  >&2 echo "INFO: Installing a basic web server for HTTP health checks."
+  temp_file=$(mktemp /tmp/nginx_config.XXXXXX)
+  cat >"$temp_file" <<NGINX_CONFIG
+server {
+  listen      80;
+  server_name kubernetes.default.svc.cluster.local;
+
+  location /healthz {
+     proxy_pass                    https://127.0.0.1:6443/healthz;
+     proxy_ssl_trusted_certificate /var/lib/kubernetes/ca.pem;
+  }
+}
+NGINX_CONFIG
+  if ! _copy_matching_files_to_all_kubernetes_controllers "$temp_file"
+  then
+    >&2 echo "ERROR: Failed to copy nginx config to one or more controllers."
+    return 1
+  fi
+  commands_to_run=$(cat <<COMMANDS
+sudo apt-get install -yq nginx > /dev/null && \
+sudo cp ~/$(basename $temp_file) /etc/nginx/sites-available/kubernetes.default.svc.cluster.local && \
+sudo ln -sf /etc/nginx/sites-available/kubernetes.default.svc.cluster.local \
+  /etc/nginx/sites-enabled && \
+sudo systemctl restart nginx >/dev/null && \
+sudo systemctl enable nginx >/dev/null
+COMMANDS
+)
+  if ! _run_command_on_all_kubernetes_controllers "$commands_to_run"
+  then
+    >&2 echo "ERROR: Failed to provision our health checks web server."
+    return 1
+  fi
+}
+
 #create_configuration_directory &&
 #download_kubernetes_binaries &&
 #initialize_kubernetes_api_server &&
 #create_kubernetes_api_server_service &&
 #configure_kubernetes_controller_manager &&
 #configure_kubernetes_default_scheduler &&
-start_controller
+#start_controller &&
+provision_web_server_for_health_checks
