@@ -157,6 +157,7 @@ fi
 }
 
 configure_kubernetes_default_scheduler() {
+  >&2 echo "INFO: Configuring the default Kubernetes scheduler."
   if ! _run_command_on_all_kubernetes_controllers \
     "sudo cp kube-scheduler.kubeconfig /var/lib/kubernetes"
   then
@@ -202,9 +203,25 @@ SERVICE_DEFINITION
   fi
 }
 
+start_controller() {
+  >&2 echo "INFO: Starting the Kubernetes controllers."
+  commands_to_run=$(cat <<COMMANDS_TO_RUN
+sudo systemctl daemon-reload; \
+sudo systemctl enable kube-apiserver kube-controller-manager kube-scheduler; \
+sudo systemctl start kube-apiserver kube-controller-manager kube-scheduler;
+COMMANDS_TO_RUN
+)
+  if ! _run_command_on_all_kubernetes_controllers "$commands_to_run"
+  then
+    >&2 echo "ERROR: Failed to start the Kubernetes controller on one or more nodes."
+    return 1
+  fi
+}
+
 #create_configuration_directory &&
 #download_kubernetes_binaries &&
 #initialize_kubernetes_api_server &&
 #create_kubernetes_api_server_service &&
 #configure_kubernetes_controller_manager &&
-configure_kubernetes_default_scheduler
+#configure_kubernetes_default_scheduler &&
+start_controller
