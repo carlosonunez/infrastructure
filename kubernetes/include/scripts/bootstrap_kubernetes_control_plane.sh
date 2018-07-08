@@ -115,7 +115,49 @@ API_SERVER_SERVICE
   fi
 }
 
+configure_kubernetes_controller_manager() {
+  >&2 echo "INFO: Configuring the controller manager."
+  if ! _run_command_on_all_kubernetes_controllers \
+    "sudo cp kube-controller-manager.kubeconfig /var/lib/kubernetes"
+  then
+    >&2 echo "ERROR: Failed to copy the config for the controller manager into /var/lib/kubernetes."
+    return 1
+  fi
+  controller_manager_service_definition=$(cat <<SYSTEMD_SERVICE_DEF
+Description=Kubernetes Controller Manager
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-controller-manager \
+  --address=0.0.0.0 \
+  --cluster-cidr=10.200.0.0/16 \
+  --cluster-name=kubernetes \
+  --cluster-signing-cert-file=/var/lib/kubernetes/ca.pem \
+  --cluster-signing-key-file=/var/lib/kubernetes/ca-key.pem \
+  --kubeconfig=/var/lib/kubernetes/kube-controller-manager.kubeconfig \
+  --leader-elect=true \
+  --root-ca-file=/var/lib/kubernetes/ca.pem \
+  --service-account-private-key-file=/var/lib/kubernetes/service-account-key.pem \
+  --service-cluster-ip-range=10.32.0.0/24 \
+  --use-service-account-credentials=true \
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_SERVICE_DEF
+)
+if ! _create_systemd_service_on_kubernetes_controllers "$controller_manager_service_definition" \
+	"kube-controller-manager"
+then
+	>&2 echo "ERROR: Failed to create the controller manager service."
+  return 1
+fi
+}
+
 #create_configuration_directory &&
 #download_kubernetes_binaries &&
 #initialize_kubernetes_api_server &&
-create_kubernetes_api_server_service
+#create_kubernetes_api_server_service &&
+configure_kubernetes_controller_manager
