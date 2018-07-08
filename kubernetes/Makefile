@@ -58,7 +58,8 @@ deploy_cluster:
 	$(MAKE) copy_control_plane_certificates && \
 	$(MAKE) generate_kubeconfigs && \
 	$(MAKE) generate_data_encryption_config_and_key && \
-	$(MAKE) bootstrap_etcd_cluster
+	$(MAKE) bootstrap_etcd_cluster && \
+	$(MAKE) bootstrap_kubernetes_control_plane
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -71,7 +72,17 @@ destroy_cluster: destroy_terraform_plan
 	copy_%_certificates \
 	generate_kubeconfigs \
 	generate_data_encryption_config_and_key \
-	bootstrap_etcd_cluster
+	bootstrap_etcd_cluster \
+	bootstrap_kubernetes_control_plane
+
+bootstrap_kubernetes_control_plane:
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/bootstrap_kubernetes_control_plane.sh
 
 bootstrap_etcd_cluster:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \

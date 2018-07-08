@@ -9,6 +9,9 @@ locals {
     0,
     var.number_of_zones
   )}"
+  kubernetes_tags = {
+    kubernetes_version = "${var.kubernetes_version}"
+  }
   aws_tags = "${merge(local.default_tags, var.additional_tags)}"
   subnet_cidr_blocks = [
     "${replace(var.cidr_block_for_kubernetes_clusters, "/^([0-9]{1,3}.[0-9]{1,3}).*/", "$1.1.0/24")}",

@@ -14,7 +14,7 @@ resource "aws_spot_instance_request" "kubernetes_control_plane" {
   vpc_security_group_ids = [ "${aws_security_group.kubernetes_clusters.id}" ]
   subnet_id = "${element(aws_subnet.kubernetes_control_plane.*.id, count.index)}"
   associate_public_ip_address = true
-  tags = "${merge(local.aws_tags, var.kubernetes_control_plane_tags)}"
+  tags = "${merge(local.aws_tags, var.kubernetes_tags, var.kubernetes_control_plane_tags)}"
   wait_for_fulfillment = "true"
   root_block_device {
     volume_type = "gp2"
@@ -38,7 +38,7 @@ resource "aws_spot_instance_request" "kubernetes_workers" {
   vpc_security_group_ids = [ "${aws_security_group.kubernetes_clusters.id}" ]
   subnet_id = "${element(aws_subnet.kubernetes_workers.*.id, count.index)}"
   associate_public_ip_address = true
-  tags = "${merge(local.aws_tags, var.kubernetes_worker_tags)}"
+  tags = "${merge(local.aws_tags, var.kubernetes_tags, var.kubernetes_worker_tags)}"
   wait_for_fulfillment = "true"
   root_block_device {
     volume_type = "gp2"
