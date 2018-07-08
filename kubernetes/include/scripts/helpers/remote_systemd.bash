@@ -4,7 +4,10 @@ _create_systemd_service_on_kubernetes_controllers() {
   systemd_service_definition_template="${1?Please provide the systemd service definition template to create.}"
   name_of_service="${2?Please provide the name of the service.}"
   substitutions_to_make=( ${@:3} )
-  for kvp in "${substitutions_to_make[@]}" "INTERNAL_IP=\$(hostname -i)"
+  substitution_commands_to_run=""
+  for kvp in "${substitutions_to_make[@]}" \
+    "INTERNAL_HOSTNAME=\$(hostname -s)" \
+    "INTERNAL_IP=\$(hostname -i)"
   do
     key=$(echo "$kvp" | cut -f1 -d =)
     value=$(echo "$kvp" | sed "s/^${key}=//")
@@ -14,7 +17,6 @@ sed -i \"s#$key#$value#g\" \"\$file_to_manipulate\";
 SUBSTITUTIONS
 )
   done
-  substitution_commands_to_run=$(echo "$substitution_commands_to_run" | sed 's/.$//')
   temp_file=$(mktemp /tmp/systemd_service.XXXXXXXXXXXX)
   temp_file_name=$(basename "$temp_file")
   echo "$systemd_service_definition_template" > "$temp_file"

@@ -57,7 +57,7 @@ Documentation=https://github.com/coreos
 
 [Service]
 ExecStart=/usr/local/bin/etcd \
-  --name ETCD_NAME \
+  --name INTERNAL_HOSTNAME \
   --cert-file=/etc/etcd/kubernetes.pem \
   --key-file=/etc/etcd/kubernetes-key.pem \
   --peer-cert-file=/etc/etcd/kubernetes.pem \
@@ -82,8 +82,8 @@ WantedBy=multi-user.target
 SYSTEMD_SERVICE
 )
   if ! _create_systemd_service_on_kubernetes_controllers "$etcd_service_definition" \
-    "etcd" \
-    "ETCD_NAME=\$(hostname -s)"
+    "etcd"
+  then
     >&2 echo "ERROR: Failed to create the service definition for etcd."
     return 1
   fi

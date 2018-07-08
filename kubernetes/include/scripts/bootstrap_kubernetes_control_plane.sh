@@ -98,7 +98,7 @@ ExecStart=/usr/local/bin/kube-apiserver \
   --service-node-port-range=30000-32767 \
   --tls-cert-file=/var/lib/kubernetes/kubernetes.pem \
   --tls-private-key-file=/var/lib/kubernetes/kubernetes-key.pem \
-  --v=2\
+  --v=2
 Restart=on-failure
 RestartSec=5
 
@@ -106,9 +106,15 @@ RestartSec=5
 WantedBy=multi-user.target
 API_SERVER_SERVICE
 )
+  etcd_servers_hostnames_removed=$(echo "$KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER" | \
+    tr ',' "\n" | \
+    cut -f2 -d = | \
+    tr "\n" ',' | \
+    sed 's/.$//'
+  )
   if ! _create_systemd_service_on_kubernetes_controllers "$api_server_service_definition" \
     "kube-apiserver" \
-    "ETCD_SERVERS=$KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER"
+    "ETCD_SERVERS=$etcd_servers_hostnames_removed"
   then
     >&2 echo "ERROR: Failed to create systemd service on one or controllers."
     return 1
@@ -141,6 +147,7 @@ ExecStart=/usr/local/bin/kube-controller-manager \
   --service-cluster-ip-range=10.32.0.0/24 \
   --use-service-account-credentials=true \
   --v=2
+
 Restart=on-failure
 RestartSec=5
 
@@ -165,7 +172,7 @@ configure_kubernetes_default_scheduler() {
     return 1
   fi
 	temp_manifest_file=$(mktemp /tmp/scheduler_manifest.XXXXXXXX)
-  scheduler_manifest=$(cat >"$temp_manifest_file" <<SCHEDULER_MANIFEST
+  cat >"$temp_manifest_file" <<SCHEDULER_MANIFEST
 apiVersion: componentconfig/v1alpha1
 kind: KubeSchedulerConfiguration
 clientConnection:
@@ -173,7 +180,7 @@ clientConnection:
 leaderElection:
   leaderElect: true
 SCHEDULER_MANIFEST
-)
+
 scheduler_service_definition=$(cat <<SERVICE_DEFINITION
 [Unit]
 Description=Kubernetes Scheduler
@@ -183,6 +190,7 @@ Documentation=https://github.com/kubernetes/kubernetes
 ExecStart=/usr/local/bin/kube-scheduler  \
   --config=/etc/kubernetes/config/kube-scheduler.yaml  \
   --v=2
+
 Restart=on-failure
 RestartSec=5
 
@@ -253,11 +261,40 @@ COMMANDS
   fi
 }
 
-#create_configuration_directory &&
-#download_kubernetes_binaries &&
-#initialize_kubernetes_api_server &&
-#create_kubernetes_api_server_service &&
-#configure_kubernetes_controller_manager &&
-#configure_kubernetes_default_scheduler &&
-#start_controller &&
-provision_web_server_for_health_checks
+verify_controllers_are_operational() {
+  >&2 echo "INFO: Verifying controllers."
+  commands_to_run=$(cat <<COMMANDS
+responses=\$(kubectl get componentstatuses --kubeconfig admin.kubeconfig --no-headers=true); \
+if ! { \
+  echo "\$responses" | grep -E "controller-manager[ ]{1,}Healthy" && \
+  echo "\$responses" | grep -E "scheduler[ ]{1,}Healthy"; \
+}; \
+then \
+  >&2 echo "ERROR: One or more Kubernetes components failed to start. See above for details."; \
+  exit 1; \
+fi; \
+healthz_status=\$(curl -H "Host: kubernetes.default.svc.cluster.local" "http://127.0.0.1/healthz"); \
+if [ "\$healthz_status" != "ok" ]; \
+then \
+  >&2 echo "ERROR: Expected /healthz to report 'ok'; instead, we got:"; \
+  >&2 echo "\$healthz_status"; \
+  exit 1; \
+fi
+COMMANDS
+)
+  if ! _run_command_on_all_kubernetes_controllers "$commands_to_run"
+  then
+    >&2 echo "ERROR: One or more Kubernetes controllers are unhealthy."
+    return 1
+  fi
+}
+
+create_configuration_directory &&
+download_kubernetes_binaries &&
+initialize_kubernetes_api_server &&
+create_kubernetes_api_server_service &&
+configure_kubernetes_controller_manager &&
+configure_kubernetes_default_scheduler &&
+start_controller &&
+provision_web_server_for_health_checks &&
+verify_controllers_are_operational
