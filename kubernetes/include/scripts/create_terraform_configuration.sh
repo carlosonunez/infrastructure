@@ -26,7 +26,7 @@ create_s3_backend() {
 terraform {
   backend "s3" {
     bucket = "${TERRAFORM_STATE_S3_BUCKET}"
-    key = "${TERRAFORM_STATE_S3_KEY}"
+    key = "${TERRAFORM_STATE_S3_KEY}/${ENVIRONMENT_NAME}"
     region = "${AWS_REGION}"
   }
 }
@@ -128,13 +128,13 @@ _create_and_download_ssh_key_from_s3() {
   then
     rm -f "$path_to_download_to" &>/dev/null
   fi
-  if ! aws s3 ls "s3://$SSH_KEY_S3_BUCKET_NAME/$SSH_KEY_S3_KEY_PATH"
+  if ! aws s3 ls "s3://$SSH_KEY_S3_BUCKET_NAME/$SSH_KEY_S3_KEY_PATH/$ENVIRONMENT_NAME"
   then
     >&2 echo "WARN: SSH key not found; creating."
     ssh-keygen -t rsa -f "$path_to_download_to" -b 2048 -N "";
-    aws s3 cp "$path_to_download_to" "s3://$SSH_KEY_S3_BUCKET_NAME/$SSH_KEY_S3_KEY_PATH";
+    aws s3 cp "$path_to_download_to" "s3://$SSH_KEY_S3_BUCKET_NAME/$SSH_KEY_S3_KEY_PATH/$ENVIRONMENT_NAME";
   else
-    aws s3 cp "s3://$SSH_KEY_S3_BUCKET_NAME/$SSH_KEY_S3_KEY_PATH" "$path_to_download_to"
+    aws s3 cp "s3://$SSH_KEY_S3_BUCKET_NAME/$SSH_KEY_S3_KEY_PATH/$ENVIRONMENT_NAME" "$path_to_download_to"
   fi
   set +e
 }
