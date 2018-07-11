@@ -63,6 +63,12 @@ CREATE_LIB_DIR_AND_COPY_CERTS_THERE
 
 create_kubernetes_api_server_service() {
   >&2 echo "INFO: Creating the API server systemd service."
+  api_server_count=$(echo "$KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES" | \
+    sed 's/,$//' | \
+    tr ',' '\n' | \
+    wc -l | \
+    tr -d ' '
+  )
   api_server_service_definition=$(cat <<API_SERVER_SERVICE
 [Unit]
 Description=Kubernetes API Server
@@ -72,7 +78,7 @@ Documentation=https://github.com/kubernetes/kubernetes
 ExecStart=/usr/local/bin/kube-apiserver \
   --advertise-address=INTERNAL_IP \
   --allow-privileged=true \
-  --apiserver-count=3 \
+  --apiserver-count="$api_server_count" \
   --audit-log-maxage=30 \
   --audit-log-maxbackup=3 \
   --audit-log-maxsize=100 \
@@ -110,6 +116,7 @@ API_SERVER_SERVICE
     tr ',' "\n" | \
     cut -f2 -d = | \
     tr "\n" ',' | \
+    sed 's/2380/2379/g' | \
     sed 's/.$//'
   )
   if ! _create_systemd_service_on_kubernetes_controllers "$api_server_service_definition" \
