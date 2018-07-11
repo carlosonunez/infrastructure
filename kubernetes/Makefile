@@ -40,6 +40,7 @@ CONTROL_PLANE_SOURCE_PATH := $(shell \
 SCRIPTS_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
 PRIVATE_KEY_PATH_VARIABLE := temporary_key_path
+PREREQUISITES="jq,parallel,aws"
 
 .PHONY: \
 	deploy_cluster \
@@ -47,6 +48,7 @@ PRIVATE_KEY_PATH_VARIABLE := temporary_key_path
 	destroy_cluster
 
 deploy_cluster:
+	$(MAKE) check_prerequisites && \
 	$(MAKE) deploy_tools_image && \
 	$(MAKE) generate_base_certificates && \
 	$(MAKE) configure_terraform && \
@@ -285,3 +287,26 @@ test_tools_image:
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests
+
+.PHONY: check_prerequisites
+
+check_prerequisites:
+	set -e; \
+	for binary in $$(echo "$(PREREQUISITES)" | tr ',' '\n'); \
+	do \
+		if ! which "$$binary" &>/dev/null; \
+		then \
+			>&2 echo "ERROR: You're missing this: $$binary"; \
+			exit 1; \
+		fi; \
+	done; \
+	if [ ! -z "$$(man sed | cat | tail -n 1 | grep BSD)" ]; \
+	then \
+		>&2 echo -e "ERROR: It seems that you're running this on a Mac with the \
+default version of sed installed. You'll need the GNU version of sed to \
+proceed with this installer.\n\n \
+To do that, install Homebrew (go to https://brew.sh if you don't have it) \
+and run this:\n\n \
+\`brew install gnu-sed --with-default-names\`."; \
+		exit 1; \
+	fi
