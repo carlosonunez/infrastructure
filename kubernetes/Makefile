@@ -75,7 +75,12 @@ destroy_cluster: destroy_terraform_plan
 	generate_kubeconfigs \
 	generate_data_encryption_config_and_key \
 	bootstrap_etcd_cluster \
-	bootstrap_kubernetes_control_plane
+	bootstrap_kubernetes_control_plane \
+	refresh_public_ip
+
+refresh_public_ip:
+	$(MAKE) configure_terraform && \
+	$(MAKE) deploy_terraform_plan
 
 bootstrap_kubernetes_control_plane:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
