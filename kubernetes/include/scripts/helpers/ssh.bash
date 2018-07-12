@@ -1,5 +1,22 @@
 #!/usr/bin/env bash
 
+_run_command_on_single_kubernetes_node() {
+  node_address="${1?Please provide a node address.}"
+  command="${2?Please provide a command to run.}"
+  ssh_command="ssh -i ${SSH_PRIVATE_KEY_PATH} \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR \
+    -o User=${SSH_USER_NAME} \
+    /usr/bin/env bash -c \"${command}\""
+  if ! eval "$ssh_command"
+  then
+    >&2 echo "Failed to run this command on [$node_address]: $command"
+    return 1
+  fi
+}
+
+
 _run_command_on_all_kubernetes_controllers() {
   command="${1?Please provide the command to run.}"
   ip_addresses=$(echo "$KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES" | \
