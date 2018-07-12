@@ -1,21 +1,3 @@
-resource "aws_security_group" "kubernetes_control_plane" {
-  name = "kubernetes_lb"
-  description = "Allows inbound access to this Kubernetes cluster"
-  tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
-  ingress {
-    from_port = "${local.kubernetes_public_port}"
-    to_port = "${local.kubernetes_public_port}"
-    protocol = "tcp"
-    cidr_blocks = [ "0.0.0.0/0" ]
-  }
-  egress {
-    from_port = 0
-    to_port = 65535
-    protocol = -1
-    cidr_blocks = [ "0.0.0.0/0" ]
-  }
-}
-
 resource "aws_lb_target_group" "kubernetes_control_plane" {
   name = "kubernetes_control_plane"
   port = "${local.kubernetes_internal_port}"
