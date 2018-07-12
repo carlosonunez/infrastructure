@@ -16,6 +16,9 @@ variable "number_of_masters_per_control_plane" {
 variable "number_of_workers_per_cluster" {
   description = "The number of workers to provision per cluster."
 }
+variable "kubernetes_version" {
+  description = "The version of Kubernetes this cluster is running. Used for tagging purposes only."
+}
 
 variable "kubernetes_node_ami" {
   description = "The AMI to use for Kubernetes nodes."

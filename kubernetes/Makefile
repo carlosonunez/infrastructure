@@ -31,7 +31,7 @@ TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
 KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
 NUMBER_OF_AVAILABILITY_ZONES ?= 3
 ENVIRONMENT_NAME ?= develop
-SSH_DELAY_IN_SECONDS ?= 45
+SSH_DELAY_IN_SECONDS ?= 60
 KUBERNETES_TOOLS_IMAGE_NAME := $(DOCKER_HUB_USERNAME)/$(KUBERNETES_TOOLS_DOCKER_IMAGE_TAG)
 KUBERNETES_TOOLS_SOURCE_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/tools")
@@ -40,6 +40,7 @@ CONTROL_PLANE_SOURCE_PATH := $(shell \
 SCRIPTS_PATH := $(shell \
 	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
 PRIVATE_KEY_PATH_VARIABLE := temporary_key_path
+PREREQUISITES="jq,parallel,aws"
 
 .PHONY: \
 	deploy_cluster \
@@ -47,6 +48,7 @@ PRIVATE_KEY_PATH_VARIABLE := temporary_key_path
 	destroy_cluster
 
 deploy_cluster:
+	$(MAKE) check_prerequisites && \
 	$(MAKE) deploy_tools_image && \
 	$(MAKE) generate_base_certificates && \
 	$(MAKE) configure_terraform && \
@@ -58,7 +60,9 @@ deploy_cluster:
 	$(MAKE) copy_control_plane_certificates && \
 	$(MAKE) generate_kubeconfigs && \
 	$(MAKE) generate_data_encryption_config_and_key && \
-	$(MAKE) bootstrap_etcd_cluster
+	$(MAKE) bootstrap_etcd_cluster && \
+	$(MAKE) bootstrap_kubernetes_control_plane && \
+	$(MAKE) enable_rbac
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -71,7 +75,34 @@ destroy_cluster: destroy_terraform_plan
 	copy_%_certificates \
 	generate_kubeconfigs \
 	generate_data_encryption_config_and_key \
-	bootstrap_etcd_cluster
+	bootstrap_etcd_cluster \
+	bootstrap_kubernetes_control_plane \
+	refresh_public_ip \
+	enable_rbac
+
+enable_rbac:
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/enable_cluster_rbac.sh
+
+refresh_public_ip:
+	$(MAKE) configure_terraform && \
+	$(MAKE) deploy_terraform_plan
+
+bootstrap_kubernetes_control_plane:
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	initial_etcd_cluster=$$($(MAKE) get_initial_etcd_cluster_addresses | tr "\n" ',' | sed 's/.$$//'); \
+	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER=$$initial_etcd_cluster \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/bootstrap_kubernetes_control_plane.sh
 
 bootstrap_etcd_cluster:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
@@ -272,3 +303,26 @@ test_tools_image:
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests
+
+.PHONY: check_prerequisites
+
+check_prerequisites:
+	set -e; \
+	for binary in $$(echo "$(PREREQUISITES)" | tr ',' '\n'); \
+	do \
+		if ! which "$$binary" &>/dev/null; \
+		then \
+			>&2 echo "ERROR: You're missing this: $$binary"; \
+			exit 1; \
+		fi; \
+	done; \
+	if [ ! -z "$$(man sed | cat | tail -n 1 | grep BSD)" ]; \
+	then \
+		>&2 echo -e "ERROR: It seems that you're running this on a Mac with the \
+default version of sed installed. You'll need the GNU version of sed to \
+proceed with this installer.\n\n \
+To do that, install Homebrew (go to https://brew.sh if you don't have it) \
+and run this:\n\n \
+\`brew install gnu-sed --with-default-names\`."; \
+		exit 1; \
+	fi
