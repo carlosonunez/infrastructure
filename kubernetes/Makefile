@@ -183,7 +183,7 @@ copy_%_certificates:
 			lb_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
 			if ! NODE_TYPE="$$node_type" \
 				KUBERNETES_MASTER_IP_ADDRESSES="$$ip_addresses" \
-				KUBERNETES_MASTER_LB_IP_ADDRESS="$$lb_address" \
+				KUBERNETES_MASTER_LB_DNS_ADDRESS="$$lb_address" \
 				ENV_FILE=.env \
 				DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 				SSH_USER_NAME=$(SSH_USER_NAME) \
@@ -226,7 +226,7 @@ get_cluster_addresses:
 		jq -r 'to_entries[] | if (.value.type == "string") then .key + ":" + .value.value else .key + ":" + .value.value[] end' |  \
 		sed 's/kubernetes_control_plane_ip_addresses/master/' | \
 		sed 's/kubernetes_workers_ip_addresses/worker/' | \
-		sed 's/kubernetes_control_plane_lb_dns_address/lb/'
+		sed 's/kubernetes_control_plane_dns_address/lb/'
 
 get_worker_addresses:
 	$(MAKE) get_cluster_addresses | grep 'worker'

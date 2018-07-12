@@ -1,4 +1,4 @@
-resource "aws_security_group" "kubernetes_control_plane" {
+resource "aws_security_group" "kubernetes_control_plane_lb" {
   name = "kubernetes_lb"
   description = "Allows inbound access to this Kubernetes cluster"
   tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
@@ -11,7 +11,7 @@ resource "aws_security_group" "kubernetes_control_plane" {
   }
   egress {
     from_port = 0
-    to_port = 65535
+    to_port = 0 
     protocol = -1
     cidr_blocks = [ "0.0.0.0/0" ]
   }
