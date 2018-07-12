@@ -3,8 +3,8 @@ resource "aws_security_group" "kubernetes_control_plane" {
   description = "Allows inbound access to this Kubernetes cluster"
   tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
   ingress {
-    from_port = 6443
-    to_port = 6443
+    from_port = "${local.kubernetes_public_port}"
+    to_port = "${local.kubernetes_public_port}"
     protocol = "tcp"
     cidr_blocks = [ "0.0.0.0/0" ]
   }
@@ -18,7 +18,7 @@ resource "aws_security_group" "kubernetes_control_plane" {
 
 resource "aws_lb_target_group" "kubernetes_control_plane" {
   name = "kubernetes_control_plane"
-  port = 6443
+  port = "${local.kubernetes_public_port}"
   protocol = "tcp"
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
   target_type = "instance"
@@ -27,7 +27,7 @@ resource "aws_lb_target_group" "kubernetes_control_plane" {
   health_check {
     interval = 10
     path = "/healthz"
-    port = 6443
+    port = 6"${local.kubernetes_public_port}"
     protocol = "HTTP"
     timeout = 10
     healthy_threshold = 3
@@ -51,7 +51,7 @@ resource "aws_lb" "kubernetes_control_plane" {
 
 resource "aws_lb_listener" "kubernetes_control_plane" {
   load_balancer_arn = "${aws_lb.kubernetes_control_plane.arn}"
-  port = 6443
+  port = "${local.kubernetes_public_port}"
   protocol = "http"
   default_action {
     target_group_arn = "${aws_lb_target_group.kubernetes_control_plane.arn}"
