@@ -20,6 +20,14 @@ variable "kubernetes_version" {
   description = "The version of Kubernetes this cluster is running. Used for tagging purposes only."
 }
 
+variable "kubernetes_public_port" {
+  description = "The port that Kubernetes clients will connect to."
+  default = 443
+}
+variable "kubernetes_internal_port" {
+  description = "The port that Kuberenetes clients will use internally."
+  default = 6443
+}
 variable "kubernetes_node_ami" {
   description = "The AMI to use for Kubernetes nodes."
   default = "ami-5cc39523"
