@@ -18,7 +18,7 @@ resource "aws_security_group" "kubernetes_control_plane" {
 
 resource "aws_lb_target_group" "kubernetes_control_plane" {
   name = "kubernetes_control_plane"
-  port = "${local.kubernetes_public_port}"
+  port = "${local.kubernetes_internal_port}"
   protocol = "tcp"
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
   target_type = "instance"
@@ -27,7 +27,7 @@ resource "aws_lb_target_group" "kubernetes_control_plane" {
   health_check {
     interval = 10
     path = "/healthz"
-    port = 6"${local.kubernetes_public_port}"
+    port = "${local.kubernetes_internal_port}"
     protocol = "HTTP"
     timeout = 10
     healthy_threshold = 3

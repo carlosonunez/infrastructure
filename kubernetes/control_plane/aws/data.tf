@@ -6,6 +6,7 @@ data "aws_route53_zone" "route53_zone_for_domain" {
 
 locals {
   kubernetes_public_port = 443
+  kubernetes_internal_port = 6443
   default_tags = {
     Domain = "${var.domain_name}"
     Environment = "${var.environment_name}"
