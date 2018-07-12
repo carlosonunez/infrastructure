@@ -226,7 +226,7 @@ get_cluster_addresses:
 		jq -r 'to_entries[] | if (.value.type == "string") then .key + ":" + .value.value else .key + ":" + .value.value[] end' |  \
 		sed 's/kubernetes_control_plane_ip_addresses/master/' | \
 		sed 's/kubernetes_workers_ip_addresses/worker/' | \
-		sed 's/kubernetes_control_plane_lb_ip_address/lb/'
+		sed 's/kubernetes_control_plane_lb_dns_address/lb/'
 
 get_worker_addresses:
 	$(MAKE) get_cluster_addresses | grep 'worker'
