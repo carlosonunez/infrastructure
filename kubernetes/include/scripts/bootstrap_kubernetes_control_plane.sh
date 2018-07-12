@@ -13,6 +13,7 @@ KUBERNETES_VERSION="${KUBERNETES_VERSION?Please provide the version of Kubernete
 KUBERNETES_BINARIES_URL="${KUBERNETES_BINARIES_URL:-https://storage.googleapis.com/kubernetes-release/release/v${KUBERNETES_VERSION}/bin/linux/amd64}"
 SSH_USER_NAME="${SSH_USER_NAME?Please provide the user to SSH as.}"
 SSH_PRIVATE_KEY_PATH="${SSH_PRIVATE_KEY_PATH?Please provide the private key to use for the SSH connection.}"
+KUBERNETES_WARM_UP_PERIOD_SECONDS="${KUBERNETES_WARM_UP_PERIOD_SECONDS:-15}"
 
 create_configuration_directory() {
   >&2 echo "INFO: Creating /etc/kubernetes/config"
@@ -269,7 +270,7 @@ COMMANDS
 }
 
 verify_controllers_are_operational() {
-  >&2 echo "INFO: Verifying controllers."
+  >&2 echo "INFO: Verifying controllers after ${KUBERNETES_WARM_UP_PERIOD_SECONDS} seconds of warmup time."
   commands_to_run=$(cat <<COMMANDS
 responses=\$(kubectl get componentstatuses --kubeconfig admin.kubeconfig --no-headers=true); \
 if ! { \
