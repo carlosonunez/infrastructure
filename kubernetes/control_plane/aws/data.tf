@@ -1,5 +1,9 @@
 data "aws_availability_zones" "available_to_this_account" {}
 
+data "aws_route53_zone" "route53_zone_for_domain" {
+  name = "${var.domain_name}"
+}
+
 locals {
   default_tags = {
     Domain = "${var.domain_name}"
