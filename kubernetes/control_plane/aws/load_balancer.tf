@@ -8,7 +8,7 @@ resource "aws_lb_target_group" "kubernetes_control_plane" {
   health_check {
     interval = 10
     path = "/healthz"
-    port = "${local.kubernetes_internal_port}"
+    port = "80"
     protocol = "HTTP"
     timeout = 5
     healthy_threshold = 3
