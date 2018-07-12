@@ -8,12 +8,9 @@ _run_command_on_single_kubernetes_node() {
     -o UserKnownHostsFile=/dev/null \
     -o LogLevel=ERROR \
     -o User=${SSH_USER_NAME} \
-    /usr/bin/env bash -c \"${command}\""
-  if ! eval "$ssh_command"
-  then
-    >&2 echo "Failed to run this command on [$node_address]: $command"
-    return 1
-  fi
+    ${node_address} \
+    \"${command}\""
+  eval "$ssh_command"
 }
 
 

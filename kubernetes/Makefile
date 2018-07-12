@@ -61,7 +61,8 @@ deploy_cluster:
 	$(MAKE) generate_kubeconfigs && \
 	$(MAKE) generate_data_encryption_config_and_key && \
 	$(MAKE) bootstrap_etcd_cluster && \
-	$(MAKE) bootstrap_kubernetes_control_plane
+	$(MAKE) bootstrap_kubernetes_control_plane && \
+	$(MAKE) enable_rbac
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -76,7 +77,17 @@ destroy_cluster: destroy_terraform_plan
 	generate_data_encryption_config_and_key \
 	bootstrap_etcd_cluster \
 	bootstrap_kubernetes_control_plane \
-	refresh_public_ip
+	refresh_public_ip \
+	enable_rbac
+
+enable_rbac:
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/enable_cluster_rbac.sh
 
 refresh_public_ip:
 	$(MAKE) configure_terraform && \
