@@ -1,4 +1,4 @@
-resource "aws_security_group" "kubernetes_control_plane_lb" {
+resource "aws_security_group" "kubernetes_control_plane" {
   name = "kubernetes_lb"
   description = "Allows inbound access to this Kubernetes cluster"
   tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
@@ -42,19 +42,35 @@ resource "aws_lb_target_group_attachment" "kubernetes_control_plane" {
   target_id = "${element(aws_spot_instance_request.kubernetes_control_plane.*.spot_instance_id, count.index)}"
 }
 
-resource "aws_lb" "kubernetes_control_plane_lb" {
+resource "aws_lb" "kubernetes_control_plane" {
   name = "kubernetes_lb"
   internal = false
   load_balancer_type = "application"
   subnets = "${aws_subnet.kubernetes_control_plane.*.id}"
 }
 
-resource "aws_lb_listener" "kubernetes_control_plane_lb" {
-  load_balancer_arn = "${aws_lb.kubernetes_control_plane_lb.arn}"
+resource "aws_lb_listener" "kubernetes_control_plane" {
+  load_balancer_arn = "${aws_lb.kubernetes_control_plane.arn}"
   port = 6443
   protocol = "http"
   default_action {
     target_group_arn = "${aws_lb_target_group.kubernetes_control_plane.arn}"
     type = "forward"
   }
+}
+
+resource "aws_route53_record" "kubernetes_public_address" {
+  zone_id = "${data.aws_route53_zone.route53_zone_for_domain.zone_id}"
+  name = "kubernetes"
+  type = "CNAME"
+  ttl = 1
+  alias {
+    name = "${aws_lb.kubernetes_control_plane.name}"
+    zone_id = "${aws_lb.kubernetes_control_plane.zone_id}"
+    evaluate_target_health = true
+  }
+}
+
+output "kubernetes_control_plane_dns_address" {
+  value = "${aws_route53_record.kubernetes_public_address.fqdn}"
 }
