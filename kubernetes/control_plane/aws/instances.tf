@@ -16,7 +16,6 @@ resource "aws_launch_configuration" "kubernetes_control_plane" {
     delete_on_termination = true
   }
   spot_price = "${var.kubernetes_nodes_spot_price}"
-  tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
 }
 
 resource "aws_launch_configuration" "kubernetes_workers" {
@@ -32,7 +31,6 @@ resource "aws_launch_configuration" "kubernetes_workers" {
     delete_on_termination = true
   }
   spot_price = "${var.kubernetes_nodes_spot_price}"
-  tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
 }
 
 resource "aws_autoscaling_group" "kubernetes_control_plane" {
@@ -42,7 +40,7 @@ resource "aws_autoscaling_group" "kubernetes_control_plane" {
   launch_configuration = "${aws_launch_configuration.kubernetes_control_plane.name}"
   vpc_zone_identifier = [ "${aws_subnet.kubernetes_control_plane.*.id}" ]
   target_group_arns = [ "${aws_lb_target_group.kubernetes_control_plane.arn}" ]
-  tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
+  tags = [ "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}" ]
   enabled_metrics = [
     "GroupMinSize",
     "GroupMaxSize",
@@ -58,7 +56,7 @@ resource "aws_autoscaling_group" "kubernetes_workers" {
   min_size = "${var.number_of_workers_per_cluster}"
   launch_configuration = "${aws_launch_configuration.kubernetes_control_plane.name}"
   vpc_zone_identifier = [ "${aws_subnet.kubernetes_workers.*.id}" ]
-  tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_worker_tags)}"
+  tags = [ "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_worker_tags)}" ]
   enabled_metrics = [
     "GroupMinSize",
     "GroupMaxSize",

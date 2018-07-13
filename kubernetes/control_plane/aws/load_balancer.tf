@@ -17,12 +17,6 @@ resource "aws_lb_target_group" "kubernetes_control_plane" {
   }
 }
 
-resource "aws_lb_target_group_attachment" "kubernetes_control_plane" {
-  count = "${var.number_of_masters_per_control_plane}"
-  target_group_arn = "${aws_lb_target_group.kubernetes_control_plane.arn}"
-  target_id = "${element(aws_spot_instance_request.kubernetes_control_plane.*.spot_instance_id, count.index)}"
-}
-
 resource "aws_lb" "kubernetes_control_plane" {
   name = "kubernetes"
   internal = false
