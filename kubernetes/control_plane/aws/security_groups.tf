@@ -1,7 +1,7 @@
 resource "aws_security_group" "kubernetes_control_plane_lb" {
   name = "kubernetes_lb"
   description = "Allows inbound access to this Kubernetes cluster"
-  tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
+  tags = "${var.base_tags}"
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
   ingress {
     from_port = "${local.kubernetes_public_port}"
@@ -20,6 +20,7 @@ resource "aws_security_group" "kubernetes_control_plane_lb" {
 resource "aws_security_group" "kubernetes_clusters" {
   name = "kubernetes_control_plane"
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
+  tags = "${var.base_tags}"
   ingress {
     from_port = 0
     to_port = 0
@@ -44,5 +45,4 @@ resource "aws_security_group" "kubernetes_clusters" {
     protocol = "-1"
     cidr_blocks = [ "0.0.0.0/0" ]
   }
-  tags = "${merge(local.aws_tags, var.kubernetes_control_plane_security_group_tags)}"
 }

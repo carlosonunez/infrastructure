@@ -4,7 +4,7 @@ resource "aws_lb_target_group" "kubernetes_control_plane" {
   protocol = "HTTP"
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
   target_type = "instance"
-  tags = "${merge(local.aws_tags, local.kubernetes_tags, var.kubernetes_control_plane_tags)}"
+  tags = "${var.base_tags}"
   health_check {
     interval = 10
     path = "/healthz"

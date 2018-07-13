@@ -1,0 +1,10 @@
+{
+  "Kubernetes Version": {
+    "value": "$KUBERNETES_VERSION",
+    "propagate": true
+  },
+  "Kubernetes Role": {
+    "value": "worker",
+    "propagate": true
+  }
+}
