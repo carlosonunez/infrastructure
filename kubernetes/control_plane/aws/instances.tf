@@ -40,7 +40,7 @@ resource "aws_autoscaling_group" "kubernetes_control_plane" {
   launch_configuration = "${aws_launch_configuration.kubernetes_control_plane.name}"
   vpc_zone_identifier = [ "${aws_subnet.kubernetes_control_plane.*.id}" ]
   target_group_arns = [ "${aws_lb_target_group.kubernetes_control_plane.arn}" ]
-  tags = "${var.kubernetes_controller_tags}"
+  tags = "${var.kubernetes_controller_asg_tags}"
   enabled_metrics = [
     "GroupMinSize",
     "GroupMaxSize",
@@ -56,7 +56,7 @@ resource "aws_autoscaling_group" "kubernetes_workers" {
   min_size = "${var.number_of_workers_per_cluster}"
   launch_configuration = "${aws_launch_configuration.kubernetes_control_plane.name}"
   vpc_zone_identifier = [ "${aws_subnet.kubernetes_workers.*.id}" ]
-  tags = "${var.kubernetes_worker_tags}"
+  tags = "${var.kubernetes_worker_asg_tags}"
   enabled_metrics = [
     "GroupMinSize",
     "GroupMaxSize",

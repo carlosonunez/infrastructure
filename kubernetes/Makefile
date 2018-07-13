@@ -52,6 +52,7 @@ deploy_cluster:
 	$(MAKE) deploy_tools_image && \
 	$(MAKE) generate_base_certificates && \
 	$(MAKE) configure_terraform && \
+	$(MAKE) configure_terraform_tags && \
 	TERRAFORM_ARGS=-force-copy $(MAKE) terraform_init && \
 	$(MAKE) terraform_validate && \
 	$(MAKE) deploy_terraform_plan && \
@@ -235,6 +236,7 @@ get_lb_address:
 
 .PHONY: \
 	configure_terraform \
+	configure_terraform_tags \
 	get_private_key_path \
 	terraform_% \
 	deploy_terraform_plan \
@@ -250,6 +252,12 @@ configure_terraform:
 	ENV_FILE=.env \
 	$(SCRIPTS_PATH)/create_terraform_configuration.sh
 
+configure_terraform_tags:
+	TAGS_PATH=$(CONTROL_PLANE_SOURCE_PATH)/aws/tags \
+	TERRAFORM_TFVARS_PATH=$(CONTROL_PLANE_SOURCE_PATH)/aws/terraform.tfvars \
+	ENV_FILE=.env \
+	$(SCRIPTS_PATH)/generate_tags.bash
+
 get_private_key_path:
 	cat $(CONTROL_PLANE_SOURCE_PATH)/aws/terraform.tfvars | \
 		grep -E "^$(PRIVATE_KEY_PATH_VARIABLE)" | \
@@ -258,7 +266,7 @@ get_private_key_path:
 
 terraform_%:
 	action=$$(echo $@ | sed 's/terraform_//') && \
-	docker run --volume "$(CONTROL_PLANE_SOURCE_PATH)/aws:/infra" \
+	docker run --rm --volume "$(CONTROL_PLANE_SOURCE_PATH)/aws:/infra" \
 		--env-file .env \
 		--env AWS_ACCESS_KEY_ID \
 		--env AWS_SECRET_ACCESS_KEY \
@@ -294,7 +302,7 @@ build_tools_image:
 		$(KUBERNETES_TOOLS_SOURCE_PATH)
 
 test_tools_image:
-	docker run --volume $(KUBERNETES_TOOLS_SOURCE_PATH):/app \
+	docker run --rm --volume $(KUBERNETES_TOOLS_SOURCE_PATH):/app \
 		--volume /var/run/docker.sock:/var/run/docker.sock \
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \

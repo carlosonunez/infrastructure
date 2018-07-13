@@ -21,12 +21,15 @@ variable "kubernetes_version" {
 }
 variable "base_tags" {
   description = "The basic set of tags to use for all resources created by this plan."
+  type = "map"
 }
-variable "controller_tags" {
+variable "kubernetes_controller_asg_tags" {
   description = "Tags to apply onto all Kubernetes controllers."
+  type = "list"
 }
-variable "worker_tags" {
+variable "kubernetes_worker_asg_tags" {
   description = "Tags to apply onto all Kubernetes workers."
+  type = "list"
 }
 
 variable "kubernetes_public_port" {

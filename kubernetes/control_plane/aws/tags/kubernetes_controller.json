@@ -1,9 +1,9 @@
 {
-  "Kubernetes Version": {
+  "kubernetes_version": {
     "value": "$KUBERNETES_VERSION",
     "propagate": true
   },
-  "Kubernetes Role": {
+  "kubernetes_role": {
     "value": "controller",
     "propagate": true
   }
