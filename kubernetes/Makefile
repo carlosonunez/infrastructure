@@ -222,11 +222,7 @@ get_initial_etcd_cluster_addresses:
 		$(SCRIPTS_PATH)/get_initial_etcd_cluster_addresses.sh
 
 get_cluster_addresses:
-	TERRAFORM_ARGS="-json" $(MAKE) terraform_output | \
-		jq -r 'to_entries[] | if (.value.type == "string") then .key + ":" + .value.value else .key + ":" + .value.value[] end' |  \
-		sed 's/kubernetes_control_plane_ip_addresses/master/' | \
-		sed 's/kubernetes_workers_ip_addresses/worker/' | \
-		sed 's/kubernetes_control_plane_dns_address/lb/'
+	ENV_FILE=.env $(SCRIPTS_PATH)/get_cluster_addresses.sh
 
 get_worker_addresses:
 	$(MAKE) get_cluster_addresses | grep 'worker'
