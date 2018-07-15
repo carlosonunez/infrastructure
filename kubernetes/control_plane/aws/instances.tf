@@ -52,8 +52,8 @@ resource "aws_autoscaling_group" "kubernetes_control_plane" {
 
 resource "aws_autoscaling_group" "kubernetes_workers" {
   name = "kubernetes_workers"
-  max_size = "${var.number_of_workers_per_cluster}"
-  min_size = "${var.number_of_workers_per_cluster}"
+  max_size = "${local.number_of_kubernetes_workers_to_deploy_per_cluster}"
+  min_size = "${local.number_of_kubernetes_workers_to_deploy_per_cluster}"
   launch_configuration = "${aws_launch_configuration.kubernetes_control_plane.name}"
   vpc_zone_identifier = [ "${aws_subnet.kubernetes_workers.*.id}" ]
   tags = "${var.kubernetes_worker_asg_tags}"

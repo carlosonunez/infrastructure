@@ -84,7 +84,7 @@ destroy_cluster: destroy_terraform_plan
 enable_rbac:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
 	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
 		SSH_PRIVATE_KEY_PATH=$$private_key_path \
 		ENV_FILE=.env \
@@ -97,7 +97,7 @@ refresh_public_ip:
 bootstrap_kubernetes_control_plane:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
 	initial_etcd_cluster=$$($(MAKE) get_initial_etcd_cluster_addresses | tr "\n" ',' | sed 's/.$$//'); \
 	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
 		KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER=$$initial_etcd_cluster \
@@ -108,7 +108,7 @@ bootstrap_kubernetes_control_plane:
 bootstrap_etcd_cluster:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
 	initial_etcd_cluster=$$($(MAKE) get_initial_etcd_cluster_addresses | tr "\n" ','); \
 	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
 		SSH_PRIVATE_KEY_PATH=$$private_key_path \
@@ -119,7 +119,7 @@ bootstrap_etcd_cluster:
 generate_data_encryption_config_and_key:
 	>&2 echo "INFO: Obtaining cluster IP addresses. Hang on a sec."; \
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
 	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
 		SSH_PRIVATE_KEY_PATH=$$private_key_path \
@@ -130,7 +130,7 @@ generate_kubeconfigs:
 	>&2 echo "INFO: Obtaining cluster IP addresses. Hang on a sec."; \
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
 	kubelet_ip_addresses=$$(echo "$$all_addresses" | grep 'worker' | cut -f2 -d : | tr "\n" ','); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
 	kube_lb_ip_address=$$(echo "$$all_addresses" | grep 'lb' | cut -f2 -d : | tr "\n" ','); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
 	SSH_PRIVATE_KEY_PATH=$$private_key_path \
@@ -174,14 +174,14 @@ copy_%_certificates:
 		control_plane) \
 			>&2 echo "INFO: Getting $${node_type} IP addresses; this might take a while."; \
 			if ! ip_addresses=$$($(MAKE) get_$${node_type}_addresses | \
-				sed 's/master://' | \
+				sed 's/controller://' | \
 				tr '\n' ',' \
 			); \
 			then \
 				>&2 echo "ERROR: Failed to retrieve IP addresses; stopping." ; \
 				exit 1; \
 			fi; \
-			lb_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
+			lb_address=$$($(MAKE) get_lb_address); \
 			if ! NODE_TYPE="$$node_type" \
 				KUBERNETES_MASTER_IP_ADDRESSES="$$ip_addresses" \
 				KUBERNETES_MASTER_LB_DNS_ADDRESS="$$lb_address" \
@@ -216,7 +216,7 @@ generate_base_certificates:
 get_initial_etcd_cluster_addresses:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'master' | cut -f2 -d : | tr "\n" ','); \
+	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
 	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
 		SSH_PRIVATE_KEY_PATH=$$private_key_path \
 		ENV_FILE=.env \
@@ -229,10 +229,10 @@ get_worker_addresses:
 	$(MAKE) get_cluster_addresses | grep 'worker'
 
 get_control_plane_addresses:
-	$(MAKE) get_cluster_addresses | grep 'master'
+	$(MAKE) get_cluster_addresses | grep 'controller'
 
 get_lb_address:
-	$(MAKE) get_cluster_addresses | grep 'lb'
+	echo "kubernetes.$(DOMAIN_NAME)"
 
 .PHONY: \
 	configure_terraform \

@@ -10,7 +10,9 @@ fi
 docker run --volume "$HOME/.aws:/root/.aws" \
   --env-file "$ENV_FILE" \
   "$AWSCLI_DOCKER_IMAGE" \
-  ec2 describe-instances \
-    --filter "Name=tag:kubernetes_role,Value=controller" \
-    --filter "Name=tag:kubernetes_role,Values=worker" \
-    --query "Reservations[*].Instances[*].PublicIpAddress"
+  ec2 describe-instances | \
+    jq -r '.Reservations[].Instances[] | 
+    select(
+      .Tags[]|.Key == "kubernetes_role" and .Value != ""
+    ) | 
+    (.Tags[]|select(.Key == "kubernetes_role")|.Value) + ":" + .PublicIpAddress'
