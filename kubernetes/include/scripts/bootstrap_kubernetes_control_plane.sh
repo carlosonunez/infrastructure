@@ -272,6 +272,7 @@ COMMANDS
 verify_controllers_are_operational() {
   >&2 echo "INFO: Verifying controllers after ${KUBERNETES_WARM_UP_PERIOD_SECONDS} seconds of warmup time."
   commands_to_run=$(cat <<COMMANDS
+sleep ${KUBERNETES_WARM_UP_PERIOD_SECONDS}; \
 responses=\$(kubectl get componentstatuses --kubeconfig admin.kubeconfig --no-headers=true); \
 if ! { \
   echo "\$responses" | grep -E "controller-manager[ ]{1,}Healthy" && \
