@@ -10,7 +10,7 @@ fi
 docker run --volume "$HOME/.aws:/root/.aws" \
   --env-file "$ENV_FILE" \
   "$AWSCLI_DOCKER_IMAGE" \
-  ec2 describe-instances | \
+  ec2 describe-instances --filter "Name=instance-state-name,Values=running" | \
     jq -r '.Reservations[].Instances[] | 
     select(
       .Tags[]|.Key == "kubernetes_role" and .Value != ""
