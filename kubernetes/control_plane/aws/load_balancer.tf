@@ -5,9 +5,10 @@ resource "aws_lb_target_group" "kubernetes_control_plane" {
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
   target_type = "instance"
   tags = "${var.base_tags}"
+  slow_start = 120
   health_check {
     interval = 10
-    path = "/healthz"
+    path = "/"
     port = "80"
     protocol = "HTTP"
     timeout = 5
@@ -39,11 +40,8 @@ resource "aws_route53_record" "kubernetes_public_address" {
   zone_id = "${data.aws_route53_zone.route53_zone_for_domain.zone_id}"
   name = "kubernetes"
   type = "CNAME"
-  alias {
-    name = "${aws_lb.kubernetes_control_plane.dns_name}"
-    zone_id = "${aws_lb.kubernetes_control_plane.zone_id}"
-    evaluate_target_health = true
-  }
+  ttl = "1"
+  records = [ "${aws_lb.kubernetes_control_plane.dns_name}" ] 
 }
 
 output "kubernetes_control_plane_dns_address" {

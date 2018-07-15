@@ -39,6 +39,12 @@ resource "aws_security_group" "kubernetes_clusters" {
     protocol = "tcp"
     security_groups = [ "${aws_security_group.kubernetes_control_plane_lb.id}" ]
   }
+  ingress {
+    from_port = "80"
+    to_port = "80"
+    protocol = "tcp"
+    security_groups = [ "${aws_security_group.kubernetes_control_plane_lb.id}" ]
+  }
   egress {
     from_port = 0
     to_port = 0

@@ -34,7 +34,7 @@ variable "kubernetes_worker_asg_tags" {
 
 variable "kubernetes_public_port" {
   description = "The port that Kubernetes clients will connect to."
-  default = 443
+  default = 6443
 }
 variable "kubernetes_internal_port" {
   description = "The port that Kuberenetes clients will use internally."
