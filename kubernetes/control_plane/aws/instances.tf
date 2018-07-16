@@ -39,7 +39,6 @@ resource "aws_autoscaling_group" "kubernetes_control_plane" {
   min_size = "${var.number_of_masters_per_control_plane}"
   launch_configuration = "${aws_launch_configuration.kubernetes_control_plane.name}"
   vpc_zone_identifier = [ "${aws_subnet.kubernetes_control_plane.*.id}" ]
-  target_group_arns = [ "${aws_lb_target_group.kubernetes_control_plane.arn}" ]
   tags = "${var.kubernetes_controller_asg_tags}"
   enabled_metrics = [
     "GroupMinSize",
@@ -48,6 +47,11 @@ resource "aws_autoscaling_group" "kubernetes_control_plane" {
     "GroupTerminatingInstances",
     "GroupTotalInstances"
   ]
+}
+
+resource "aws_autoscaling_attachment" "kubernetes_control_plane" {
+  autoscaling_group_name = "${aws_autoscaling_group.kubernetes_control_plane.id}"
+  elb = "${aws_elb.kubernetes_control_plane.id}"
 }
 
 resource "aws_autoscaling_group" "kubernetes_workers" {

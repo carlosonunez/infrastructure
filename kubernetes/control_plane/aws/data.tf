@@ -5,7 +5,7 @@ data "aws_route53_zone" "route53_zone_for_domain" {
 }
 
 locals {
-  kubernetes_public_port = 443
+  kubernetes_public_port = 6443
   kubernetes_internal_port = 6443
   availability_zones_to_use = "${slice(data.aws_availability_zones.available_to_this_account.names,
     0,
