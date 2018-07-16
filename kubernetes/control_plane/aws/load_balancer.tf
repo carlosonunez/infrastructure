@@ -4,9 +4,9 @@ resource "aws_elb" "kubernetes_control_plane" {
   security_groups = [ "${aws_security_group.kubernetes_control_plane_lb.id}" ]
   listener {
     instance_port = "${local.kubernetes_internal_port}"
-    instance_protocol = "HTTPS"
+    instance_protocol = "TCP"
     lb_port = "${local.kubernetes_public_port}"
-    lb_protocol = "HTTP"
+    lb_protocol = "TCP"
   }
   health_check {
     healthy_threshold = 3

@@ -192,7 +192,7 @@ copy_%_certificates:
 				>&2 echo "ERROR: Failed to retrieve IP addresses; stopping." ; \
 				exit 1; \
 			fi; \
-			lb_address=$$($(MAKE) get_lb_address); \
+			lb_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
 			if ! NODE_TYPE="$$node_type" \
 				KUBERNETES_MASTER_IP_ADDRESSES="$$ip_addresses" \
 				KUBERNETES_MASTER_LB_DNS_ADDRESS="$$lb_address" \

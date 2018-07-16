@@ -31,8 +31,8 @@ generate_kubelet_kubeconfigs() {
 		--server=https://${KUBERNETES_CONTROL_PLANE_LOAD_BALANCER_ADDRESS}:6443 \
 		--kubeconfig=/data/${hostname}.kubeconfig && \
 	kubectl config set-credentials system:node:${hostname} \
-		--client-certificate="/data/${ip_address}.pem" \
-		--client-key="/data/${ip_address}-key.pem" \
+		--client-certificate="/data/${hostname}.pem" \
+		--client-key="/data/${hostname}-key.pem" \
 		--embed-certs=true \
 		--kubeconfig=/data/${hostname}.kubeconfig && \
 	kubectl config set-context default \

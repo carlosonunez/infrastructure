@@ -116,8 +116,8 @@ clusterDNS:
   - "10.32.0.10"
 podCIDR: "MY_CIDR"
 runtimeRequestTimeout: "15m"
-tlsCertFile: "/var/lib/kubelet/MY_IP.pem"
-tlsPrivateKeyFile: "/var/lib/kubelet/MY_IP-key.pem"
+tlsCertFile: "/var/lib/kubelet/MY_HOSTNAME.pem"
+tlsPrivateKeyFile: "/var/lib/kubelet/MY_HOSTNAME-key.pem"
 MANIFEST
 )
   _run_or_fail "Moving kubelet certificates" \
@@ -125,7 +125,7 @@ MANIFEST
     "$(cat <<COMMANDS
 this_ip_address=\$(hostname -i) && \
 this_hostname=\$(hostname -s) && \
-sudo mv \${this_ip_address}-key.pem \${this_ip_address}.pem /var/lib/kubelet/ && \
+sudo mv \${this_hostname}-key.pem \${this_hostname}.pem /var/lib/kubelet/ && \
 sudo mv \${this_hostname}.kubeconfig /var/lib/kubelet/kubeconfig && \
 sudo mv ca.pem /var/lib/kubernetes/
 COMMANDS
@@ -143,7 +143,7 @@ metadata="http://169.254.169.254/latest/meta-data" && \
 mac="\$(curl -s \$metadata/network/interfaces/macs/ | head -n1 | tr -d '/')" && \
 subnet_cidr="\$(curl -s \$metadata/network/interfaces/macs/\$mac/subnet-ipv4-cidr-block/)" && \
 sed -i "s#MY_CIDR#\$subnet_cidr#g" $(basename $temp_file) && \
-sed -i "s/MY_IP/\$(hostname -i)/g" $(basename $temp_file) && \
+sed -i "s/MY_HOSTNAME/\$(hostname -s)/g" $(basename $temp_file) && \
 sudo mv $(basename $temp_file) /var/lib/kubelet/kubelet-config.yaml
 COMMANDS
 )"
