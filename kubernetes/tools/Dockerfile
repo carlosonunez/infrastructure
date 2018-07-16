@@ -5,6 +5,10 @@ ENV CERT_UTILS_VERSION=1.2
 ENV KUBECTL_VERSION=1.10.2
 ENV EXTRA_BINARIES=jq,bash,curl
 
+# Copy our kubectl initialization script
+COPY initialize_kubectl_with_defaults.sh /usr/local/bin/initialize_kubectl_with_defaults
+RUN chmod 755 /usr/local/bin/initialize_kubectl_with_defaults
+
 # Install additional useful utilities
 RUN apk add --update-cache $(echo "$EXTRA_BINARIES" | tr ',' ' ')
 
@@ -28,6 +32,5 @@ RUN curl --output /usr/local/bin/kubectl \
 RUN mkdir /scratch && chown 1000 /scratch
 
 # Make the entrypoint bash
-USER 1000
 WORKDIR /scratch
-ENTRYPOINT bash
+ENTRYPOINT [ "bash", "-c" ]

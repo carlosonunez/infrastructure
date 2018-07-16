@@ -64,7 +64,8 @@ deploy_cluster:
 	$(MAKE) bootstrap_etcd_cluster && \
 	$(MAKE) bootstrap_kubernetes_control_plane && \
 	$(MAKE) enable_rbac && \
-	$(MAKE) bootstrap_kubernetes_workers
+	$(MAKE) bootstrap_kubernetes_workers && \
+	$(MAKE) enable_remote_access
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -80,7 +81,15 @@ destroy_cluster: destroy_terraform_plan
 	bootstrap_etcd_cluster \
 	bootstrap_kubernetes_control_plane \
 	refresh_public_ip \
-	enable_rbac
+	enable_rbac \
+	bootstrap_kubernetes_workers \
+	enable_remote_access
+
+enable_remote_access:
+	KUBERNETES_MASTER_LB_DNS_ADDRESS=$$($(MAKE) get_lb_address) \
+	DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
+	ENV_FILE=.env \
+	$(SCRIPTS_PATH)/enable_remote_access.bash
 
 enable_rbac:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
