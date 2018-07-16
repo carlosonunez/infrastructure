@@ -2,12 +2,12 @@ resource "aws_vpc" "kubernetes_clusters" {
   cidr_block = "${var.cidr_block_for_kubernetes_clusters}"
   enable_dns_support = true
   enable_dns_hostnames = true
-  tags = "${merge(local.aws_tags, var.kubernetes_cluster_vpc_tags)}"
+  tags = "${var.base_tags}"
 }
 
 resource "aws_internet_gateway" "kubernetes_clusters" {
   vpc_id = "${aws_vpc.kubernetes_clusters.id}"
-  tags = "${merge(local.aws_tags, var.kubernetes_cluster_vpc_tags)}"
+  tags = "${var.base_tags}"
 }
 
 resource "aws_route_table" "kubernetes_clusters" {
@@ -24,7 +24,7 @@ resource "aws_subnet" "kubernetes_control_plane" {
   availability_zone = "${data.aws_availability_zones.available_to_this_account.names[count.index]}"
   cidr_block = "${local.subnet_cidr_blocks[count.index]}"
   map_public_ip_on_launch = true
-  tags = "${merge(local.aws_tags, var.kubernetes_control_plane_subnet_tags)}"
+  tags = "${var.base_tags}"
 }
 
 resource "aws_route_table_association" "kubernetes_control_plane" {
@@ -39,7 +39,7 @@ resource "aws_subnet" "kubernetes_workers" {
   availability_zone = "${data.aws_availability_zones.available_to_this_account.names[count.index]}"
   cidr_block = "${local.worker_subnet_cidr_blocks[count.index]}"
   map_public_ip_on_launch = true
-  tags = "${merge(local.aws_tags, var.kubernetes_worker_subnet_tags)}"
+  tags = "${var.base_tags}"
 }
 
 resource "aws_route_table_association" "kubernetes_workers" {

@@ -1,0 +1,10 @@
+{
+  "Domain": {
+    "value": "$DOMAIN_NAME",
+    "propagate": true
+  },
+  "Environment": {
+    "value": "$ENVIRONMENT_NAME",
+    "propagate": true
+  }
+}

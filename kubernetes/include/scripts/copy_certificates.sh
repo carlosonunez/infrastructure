@@ -19,7 +19,7 @@ SSH_USER_NAME="${SSH_USER_NAME?Please provide the user to SSH as.}"
 SSH_PRIVATE_KEY_PATH="${SSH_PRIVATE_KEY_PATH?Please provide the private key to use for the SSH connection.}"
 KUBELET_IP_ADDRESS="${KUBELET_IP_ADDRESS}"
 KUBERNETES_MASTER_IP_ADDRESSES="${KUBERNETES_MASTER_IP_ADDRESSES}"
-KUBERNETES_MASTER_LB_IP_ADDRESS="${KUBERNETES_MASTER_LB_IP_ADDRESS}"
+KUBERNETES_MASTER_LB_DNS_ADDRESS="${KUBERNETES_MASTER_LB_DNS_ADDRESS}"
 CA_CSR_TEMPLATE=$(cat <<CSR_CONFIG
 {\
   \"CN\": \"<common_name>\",\
@@ -102,7 +102,7 @@ echo "$csr_json" | cfssl gencert \
   -ca=/keys/ca.pem \
   -ca-key=/keys/ca-key.pem \
   -config=/keys/ca-config.json \
-  -hostname=${internal_master_ip_addresses},${KUBERNETES_MASTER_LB_IP_ADDRESS},127.0.0.1,kubernetes.default \
+  -hostname=${internal_master_ip_addresses},${KUBERNETES_MASTER_LB_DNS_ADDRESS},127.0.0.1,kubernetes.default \
   -profile=kubernetes - | \
   cfssljson -bare kubernetes && \
 mv *.pem /keys && \
@@ -140,7 +140,7 @@ case "$NODE_TYPE" in
     fi
     ;;
   master|control_plane)
-    if [ -z "$KUBERNETES_MASTER_IP_ADDRESSES" ] || [ -z "$KUBERNETES_MASTER_LB_IP_ADDRESS" ]
+    if [ -z "$KUBERNETES_MASTER_IP_ADDRESSES" ] || [ -z "$KUBERNETES_MASTER_LB_DNS_ADDRESS" ]
     then
       >&2 echo "ERROR: Ensure that you've provided an IP address for the masters \
 and their load balancer."

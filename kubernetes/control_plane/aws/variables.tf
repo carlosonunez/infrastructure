@@ -19,7 +19,27 @@ variable "number_of_workers_per_cluster" {
 variable "kubernetes_version" {
   description = "The version of Kubernetes this cluster is running. Used for tagging purposes only."
 }
+variable "base_tags" {
+  description = "The basic set of tags to use for all resources created by this plan."
+  type = "map"
+}
+variable "kubernetes_controller_asg_tags" {
+  description = "Tags to apply onto all Kubernetes controllers."
+  type = "list"
+}
+variable "kubernetes_worker_asg_tags" {
+  description = "Tags to apply onto all Kubernetes workers."
+  type = "list"
+}
 
+variable "kubernetes_public_port" {
+  description = "The port that Kubernetes clients will connect to."
+  default = 6443
+}
+variable "kubernetes_internal_port" {
+  description = "The port that Kuberenetes clients will use internally."
+  default = 6443
+}
 variable "kubernetes_node_ami" {
   description = "The AMI to use for Kubernetes nodes."
   default = "ami-5cc39523"
@@ -51,44 +71,4 @@ variable "cidr_block_for_kubernetes_clusters" {
 variable "domain_name" {
   description = "The domain under management."
   default = "carlosnunez.me"
-}
-
-variable "additional_tags" {
-  description = "Additional tags to append onto resources that support tagging."
-  type = "map"
-  default = {}
-}
-
-variable "kubernetes_cluster_vpc_tags" {
-  description = "Tags to apply onto the VPC created for k8s clusters."
-  default = {}
-}
-
-variable "kubernetes_control_plane_subnet_tags" {
-  description = "Tags to apply onto the subnets created for k8s clusters."
-  default = {}
-}
-
-variable "kubernetes_worker_subnet_tags" {
-  description = "Tags to apply onto the subnets created for k8s clusters."
-  default = {}
-}
-
-variable "kubernetes_control_plane_security_group_tags" {
-  description = "Custom tags to use for the security group associated with the control plane"
-  default = {}
-}
-
-variable "kubernetes_control_plane_tags" {
-  description = "Tags to use for Kubernetes nodes."
-  default = {
-    "kubernetes_node_type" = "master"
-  }
-}
-
-variable "kubernetes_worker_tags" {
-  description = "Tags to use for Kubernetes nodes."
-  default = {
-    "kubernetes_node_type" = "worker"
-  }
 }
