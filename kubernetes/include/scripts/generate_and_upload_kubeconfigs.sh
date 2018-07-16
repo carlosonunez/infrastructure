@@ -31,8 +31,8 @@ generate_kubelet_kubeconfigs() {
 		--server=https://${KUBERNETES_CONTROL_PLANE_LOAD_BALANCER_ADDRESS}:6443 \
 		--kubeconfig=/data/${hostname}.kubeconfig && \
 	kubectl config set-credentials system:node:${hostname} \
-		--client-certificate="/data/${ip_address}.pem" \
-		--client-key="/data/${ip_address}-key.pem" \
+		--client-certificate="/data/${hostname}.pem" \
+		--client-key="/data/${hostname}-key.pem" \
 		--embed-certs=true \
 		--kubeconfig=/data/${hostname}.kubeconfig && \
 	kubectl config set-context default \
@@ -71,7 +71,8 @@ chown "$(id -u)" /data/kube-proxy.kubeconfig
 KUBECTL_COMMANDS
 )
 	_run_docker_command_in_tools_image "$command_to_run" &&
-	_copy_matching_files_to_all_kubernetes_controllers "/tmp/kube-proxy.kubeconfig"
+	_copy_matching_files_to_all_kubernetes_controllers "/tmp/kube-proxy.kubeconfig" &&
+  _copy_matching_files_to_all_kubernetes_workers "/tmp/kube-proxy.kubeconfig"
 }
 
 generate_controller_manager_kubeconfig() {
@@ -95,7 +96,8 @@ chown "$(id -u)" /data/kube-controller-manager.kubeconfig
 KUBECTL_COMMANDS
 )
 	_run_docker_command_in_tools_image "$command_to_run" && 
-		_copy_matching_files_to_all_kubernetes_controllers "/tmp/kube-controller-manager.kubeconfig"
+		_copy_matching_files_to_all_kubernetes_controllers "/tmp/kube-controller-manager.kubeconfig" &&
+    _copy_matching_files_to_all_kubernetes_workers "/tmp/kube-controller-manager.kubeconfig"
 }
 
 generate_controller_scheduler_kubeconfig() {
@@ -155,6 +157,14 @@ _copy_matching_files_to_home_directory_on_remote_host() {
 _copy_matching_files_to_all_kubernetes_controllers() {
 	files_to_copy="${1?Please provide the files to copy.}"
 	for ip_address in $(echo "$KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES" | tr ',' "\n")
+	do
+		_copy_matching_files_to_home_directory_on_remote_host "$ip_address" "$files_to_copy"
+	done
+}
+
+_copy_matching_files_to_all_kubernetes_workers() {
+	files_to_copy="${1?Please provide the files to copy.}"
+	for ip_address in $(echo "$KUBELET_PUBLIC_IP_ADDRESSES" | tr ',' "\n")
 	do
 		_copy_matching_files_to_home_directory_on_remote_host "$ip_address" "$files_to_copy"
 	done

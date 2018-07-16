@@ -46,7 +46,7 @@ get_private_ip_address_and_hostname() {
   ssh -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
     -i "$SSH_PRIVATE_KEY_PATH" \
-    "$SSH_USER_NAME@$ip_address" "echo \$(hostname):\$(hostname -i)"
+    "$SSH_USER_NAME@$ip_address" "echo \$(hostname -i):\$(hostname -s)"
 }
 
 generate_and_upload_kubelet_cert_for_host() {

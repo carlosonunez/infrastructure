@@ -63,7 +63,8 @@ deploy_cluster:
 	$(MAKE) generate_data_encryption_config_and_key && \
 	$(MAKE) bootstrap_etcd_cluster && \
 	$(MAKE) bootstrap_kubernetes_control_plane && \
-	$(MAKE) enable_rbac
+	$(MAKE) enable_rbac && \
+	$(MAKE) bootstrap_kubernetes_workers
 
 deploy_tools_image:
 	$(MAKE) build_tools_image && \
@@ -93,6 +94,16 @@ enable_rbac:
 refresh_public_ip:
 	$(MAKE) configure_terraform && \
 	$(MAKE) deploy_terraform_plan
+	
+bootstrap_kubernetes_workers:
+	all_addresses=$$($(MAKE) get_cluster_addresses); \
+	private_key_path=$$($(MAKE) get_private_key_path); \
+	kube_worker_ip_addresses=$$(echo "$$all_addresses" | grep 'worker' | cut -f2 -d : | tr "\n" ','); \
+	KUBERNETES_WORKERS_PUBLIC_IP_ADDRESSES=$$kube_worker_ip_addresses \
+		SSH_PRIVATE_KEY_PATH=$$private_key_path \
+		ENV_FILE=.env \
+		$(SCRIPTS_PATH)/bootstrap_kubernetes_workers.sh
+
 
 bootstrap_kubernetes_control_plane:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
@@ -131,7 +142,7 @@ generate_kubeconfigs:
 	all_addresses=$$($(MAKE) get_cluster_addresses); \
 	kubelet_ip_addresses=$$(echo "$$all_addresses" | grep 'worker' | cut -f2 -d : | tr "\n" ','); \
 	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
-	kube_lb_ip_address=$$(echo "$$all_addresses" | grep 'lb' | cut -f2 -d : | tr "\n" ','); \
+	kube_lb_ip_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
 	private_key_path=$$($(MAKE) get_private_key_path); \
 	SSH_PRIVATE_KEY_PATH=$$private_key_path \
 		DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
@@ -181,7 +192,7 @@ copy_%_certificates:
 				>&2 echo "ERROR: Failed to retrieve IP addresses; stopping." ; \
 				exit 1; \
 			fi; \
-			lb_address=$$($(MAKE) get_lb_address); \
+			lb_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
 			if ! NODE_TYPE="$$node_type" \
 				KUBERNETES_MASTER_IP_ADDRESSES="$$ip_addresses" \
 				KUBERNETES_MASTER_LB_DNS_ADDRESS="$$lb_address" \
@@ -223,7 +234,8 @@ get_initial_etcd_cluster_addresses:
 		$(SCRIPTS_PATH)/get_initial_etcd_cluster_addresses.sh
 
 get_cluster_addresses:
-	ENV_FILE=.env $(SCRIPTS_PATH)/get_cluster_addresses.sh
+	ENV_FILE=.env $(SCRIPTS_PATH)/get_cluster_addresses.sh; \
+	$(MAKE) get_lb_address
 
 get_worker_addresses:
 	$(MAKE) get_cluster_addresses | grep 'worker'
@@ -232,7 +244,7 @@ get_control_plane_addresses:
 	$(MAKE) get_cluster_addresses | grep 'controller'
 
 get_lb_address:
-	echo "kubernetes.$(DOMAIN_NAME)"
+	echo "lb:kubernetes.$(DOMAIN_NAME)"
 
 .PHONY: \
 	configure_terraform \
