@@ -1,0 +1,18 @@
+---
+
+ansible_home_directory: "{{ ansible_env.PWD }}"
+kubernetes_version: 1.10.2
+local_certificate_storage_path: /tmp
+kubernetes_ca_state_code: TX
+kubernetes_ca_ou_code: CA
+kubernetes_ca_common_name: Kubernetes
+kubernetes_ca_country_code: US
+kubernetes_ca_location_code: Dallas
+cfssl_docker_image: cfssl/cfssl
+cfssl_url: https://pkg.cfssl.org/R1.2/cfssl_linux-amd64
+cfssljson_url: https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+kubectl_url: https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubectl
+public_ip_address_api_url: https://api.ipify.org
+use_systemd: True
+async_value_to_leave_background_process_in_background_forever_sort_of: 100000000000000000000000000000000000000000000000
+skip_kubectl: False

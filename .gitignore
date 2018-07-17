@@ -17,3 +17,9 @@ env.*
 
 # Ansible ignores
 *.retry
+
+# Scratch directory
+scratch/
+
+# Ignore binaries
+kubectl

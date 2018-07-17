@@ -1,0 +1,123 @@
+---
+- debug:
+    msg: "Are we using systemd? {{ use_systemd }}"
+
+- name: Expose the certificate token
+  set_fact:
+    certificate_token: "{{ lookup('env', 'CERT_TOKEN') }}"
+  failed_when: certificate_token == ""
+
+- name: Gather EC2 facts.
+  action: ec2_facts
+  when: lookup('env', 'INSTANCE_ROLE') != ""
+
+- name: Tag our instance with its role
+  ec2_tag:
+    resource: "{{ ansible_ec2_instance_id }}"
+    state: present
+    region: "{{ ansible_ec2_placement_region }}"
+    tags:
+      kubernetes_role: "{{ lookup('env', 'INSTANCE_ROLE') }}"
+  when: lookup('env', 'INSTANCE_ROLE') != ""
+
+- name: Fetch Ansible S3 bucket and key from environment if defined.
+  ignore_errors: true
+  set_fact:
+    ansible_vars_s3_bucket: "{{ lookup('env', 'ANSIBLE_VARS_S3_BUCKET') }}"
+    ansible_vars_s3_key: "{{ lookup('env', 'ANSIBLE_VARS_S3_KEY') }}"
+    environment_name: "{{ lookup('env', 'ENVIRONMENT_NAME') }}"
+  when: >
+    lookup('env', 'ANSIBLE_VARS_S3_BUCKET') != "" and
+    lookup('env', 'ANSIBLE_VARS_S3_KEY') != "" and
+    lookup('env', 'ENVIRONMENT_NAME') != ""
+
+- name: Fetch Ansible vars from s3
+  aws_s3:
+    bucket: "{{ ansible_vars_s3_bucket }}"
+    object: "{{ ansible_vars_s3_key }}/{{ environment_name }}/ansible_vars.yml"
+    dest: /etc/ansible/ansible_vars.yml
+    mode: get
+
+- name: Protect the vars file
+  file:
+    mode: 0600
+    path: /etc/ansible/ansible_vars.yml
+
+- name: Load vars
+  include_vars: /etc/ansible/ansible_vars.yml
+
+- name: Get our public IP address.
+  block:
+  - name: Get our public IP address
+    uri:
+      url: "{{ public_ip_address_api_url }}"
+      timeout: 5
+      return_content: yes
+      method: GET
+    register: public_ip_address_response
+    failed_when: False
+  - name: Expose our public IP address as an Ansible fact.
+    set_fact:
+      external_ip: "{{ public_ip_address_response.content }}"
+
+- name: Download cfssl and cfssljson
+  get_url:
+    url: "{{ item }}"
+    dest: "/usr/local/bin/{{ item.split('/')[-1].split('_')[0] }}"
+  with_items:
+    - "{{ cfssl_url }}"
+    - "{{ cfssljson_url }}"
+
+- name: Mark cfssl and cfssljson as executable
+  file:
+    path: "/usr/local/bin/{{ item }}"
+    mode: 0755
+  with_items:
+    - cfssl
+    - cfssljson
+
+- name: Download kubectl
+  get_url:
+    url: "{{ kubectl_url }}"
+    dest: /usr/local/bin/kubectl
+    mode: 0755
+  when: not (skip_kubectl | bool)
+
+- name: Verify kubectl
+  shell: "kubectl version --client"
+  register: kubectl_output
+  failed_when: kubectl_output.rc != 0
+  when: not (skip_kubectl | bool)
+  tags:
+    - skip_ansible_lint
+
+- name: Enable br_netfilter if we're running on a Kubernetes node
+  modprobe:
+    name: br_netfilter
+    state: present
+  when: lookup('env', 'INSTANCE_ROLE') == "controller" or lookup('env', 'INSTANCE_ROLE') == "worker"
+
+- name: Disable systemd-resolved if we're running on an instance
+  systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: no
+  when: lookup('env', 'INSTANCE_ROLE') == "controller" or lookup('env', 'INSTANCE_ROLE') == "worker"
+
+- name: Use a generic /etc/resolv.conf if we're running on an instance
+  copy:
+    src: files/resolv.conf
+    dest: /etc/resolv.conf
+  when: lookup('env', 'INSTANCE_ROLE') == "controller" or lookup('env', 'INSTANCE_ROLE') == "worker"
+
+- name: Enable IPv4 and IPv6 packet forwarding (for CNI to work)
+  sysctl:
+    name: "{{ item }}"
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+  when: lookup('env', 'INSTANCE_ROLE') == "controller" or lookup('env', 'INSTANCE_ROLE') == "worker"
+  with_items:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding

@@ -20,6 +20,11 @@ _run_command_on_all_kubernetes_controllers() {
     sed 's/.$//' | \
     tr ',' ' '
   )
+  if [ -z "$SSH_PRIVATE_KEY_PATH" ]
+  then
+    >&2 echo "ERROR: SSH_PRIVATE_KEY_PATH is missing."
+    return 1
+  fi
   ssh_command="ssh -i ${SSH_PRIVATE_KEY_PATH} \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \

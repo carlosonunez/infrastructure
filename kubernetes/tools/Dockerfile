@@ -6,8 +6,8 @@ ENV KUBECTL_VERSION=1.10.2
 ENV EXTRA_BINARIES=jq,bash,curl
 
 # Copy our kubectl initialization script
-COPY initialize_kubectl_with_defaults.sh /usr/local/bin/initialize_kubectl_with_defaults
-RUN chmod 755 /usr/local/bin/initialize_kubectl_with_defaults
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 755 /usr/local/bin/entrypoint.sh
 
 # Install additional useful utilities
 RUN apk add --update-cache $(echo "$EXTRA_BINARIES" | tr ',' ' ')
@@ -33,4 +33,4 @@ RUN mkdir /scratch && chown 1000 /scratch
 
 # Make the entrypoint bash
 WORKDIR /scratch
-ENTRYPOINT [ "bash", "-c" ]
+ENTRYPOINT [ "entrypoint.sh" ]

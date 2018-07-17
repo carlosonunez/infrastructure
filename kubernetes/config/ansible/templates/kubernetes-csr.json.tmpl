@@ -1,0 +1,17 @@
+{
+  "hosts": [ "10.32.0.1", {{ cluster_ip_addresses_string }}, "{{ kubernetes_public_address }}", "127.0.0.1", "kubernetes.default" ],
+  "CN": "kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "{{ kubernetes_ca_country_code }}",
+      "L": "{{ kubernetes_ca_location_code }}",
+      "O": "Kubernetes",
+      "OU": "Kubernetes cluster",
+      "ST": "{{ kubernetes_ca_state_code }}"
+    }
+  ]
+}

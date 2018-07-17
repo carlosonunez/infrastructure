@@ -1,0 +1,92 @@
+- name: Start the playbook
+  debug:
+    msg: "Waiting for {{ expected_etcd_servers }} to start."
+
+- name: Discover other etcd clusters in this cluster
+  ec2_instance_facts:
+    filters:
+      instance-state-name: running
+      "tag:kubernetes_role": etcd
+  register: found_instances
+  until: ( found_instances.instances | length ) == ( expected_etcd_servers | int )
+  retries: 20
+  delay: 5
+
+- name: Create some folders that we'll need for etcd
+  file:
+    state: directory
+    path: "{{ item }}"
+  with_items:
+    - /etc/etcd
+    - /var/lib/etcd
+    - /tmp/etcd
+
+- name: Fetch relevant certificates.
+  aws_s3:
+    mode: get
+    bucket: "{{ certificate_s3_bucket }}"
+    object: "{{ certificate_s3_key }}/{{ environment_name }}/{{ certificate_token }}-{{ item }}"
+    dest: "/etc/etcd/{{ item }}"
+  with_items:
+    - ca.pem
+    - kubernetes-key.pem
+    - kubernetes.pem
+  retries: 5
+  delay: 5
+
+- name: Generate etcd initial cluster list
+  set_fact:
+    etcd_initial_cluster_string: "{% for instance in found_instances.instances %}ip-{{instance.private_ip_address.replace('.','-')}}=https://{{instance.private_ip_address}}:2380,{% endfor %}"
+
+- name: Remove last comma from string
+  set_fact:
+    etcd_initial_cluster_string: "{{ etcd_initial_cluster_string[:-1] }}"
+
+- name: Download and unarchive the etcd tarball.
+  unarchive:
+    src: "{{ etcd_url }}"
+    dest: /tmp/etcd
+    remote_src: yes
+
+- name: Move etcd binaries into /usr/local/bin.
+  shell: "cp -v /tmp/etcd/etcd-v{{ etcd_version }}-linux-amd64/etcd* /usr/local/bin/"
+  register: command_result
+
+- debug:
+    msg: "Command result: {{ command_result.stdout }}"
+
+- name: Ensure binaries we want are present
+  stat:
+    path: "/usr/local/bin/{{ item }}"
+  register: etcd_binary
+  failed_when: not etcd_binary.stat.exists
+  with_items:
+    - etcd
+    - etcdctl
+
+- name: Create systemd service.
+  template:
+    src: templates/etcd.service.tmpl
+    dest: /etc/systemd/system/etcd.service
+  when: (use_systemd | bool)
+
+- name: Ensure that the etcd systemd service is up.
+  systemd:
+    name: etcd
+    daemon_reload: yes
+    state: started
+  when: (use_systemd | bool)
+
+- name: Start etcd in the background.
+  shell: "nohup {{ etcd_start_command }} &"
+  poll: 0
+  async: "{{ async_value_to_leave_background_process_in_background_forever_sort_of }}"
+  when: not (use_systemd | bool)
+
+- name: Wait for all members of this etcd cluster to discover themselves.
+  pause:
+    seconds: 15
+
+- name: Ensure that the etcd cluster has started.
+  shell: "{{ etcd_confirm_command }}"
+  register: etcdctl_result

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 source "$(git rev-parse --show-toplevel)/kubernetes/include/scripts/helpers/ssh.bash"
 source "$(git rev-parse --show-toplevel)/kubernetes/include/scripts/helpers/remote_systemd.bash"
 if [ -z "$ENV_FILE" ] || [ ! -f "$ENV_FILE" ]
@@ -9,6 +10,7 @@ else
 fi
 KUBERNETES_WORKERS_PUBLIC_IP_ADDRESSES="${KUBERNETES_WORKERS_PUBLIC_IP_ADDRESSES?Please provide a list of all worker addresses in this cluster.}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION?Please provide the version of Kubernetes that we are installing.}"
+KUBERNETES_POD_CIDR="${KUBERNETES_POD_CIDR?Please provide the cluster-wide CIDR to use for Pods.}"
 SSH_USER_NAME="${SSH_USER_NAME?Please provide the user to SSH as.}"
 SSH_PRIVATE_KEY_PATH="${SSH_PRIVATE_KEY_PATH?Please provide the private key to use for the SSH connection.}"
 KUBERNETES_BINARY_URL="${KUBERNETES_BINARY_URL:-https://storage.googleapis.com/kubernetes-release/release/v${KUBERNETES_VERSION}/bin/linux/amd64}"
@@ -17,6 +19,18 @@ RUNSC_URL="${RUNSC_URL:-https://storage.googleapis.com/kubernetes-the-hard-way/r
 RUNC_URL="${RUNC_URL:-https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5/runc.amd64}"
 CNI_PLUGINS_URL="${CNI_PLUGINS_URL:-https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz}"
 CONTAINERD_URL="${CONTAINERD_URL:-https://github.com/containerd/containerd/releases/download/v1.1.0/containerd-1.1.0.linux-amd64.tar.gz}"
+
+generate_pod_cidrs_for_each_worker() {
+  _run_or_fail "Generating Pod CIDRs" \
+    "Failed to generate Pod CIDRs on at least one host." \
+    "$(cat <<COMMANDS
+random_third_octet=\$(seq 0 256 | sort -R | head -1); \
+echo "$KUBERNETES_POD_CIDR" | \
+  cut -f1-2 -d . | \
+  xargs -I {} echo "{}.\$random_third_octet.0/24" > pod_cidr
+COMMANDS
+)"
+}
 
 start_worker_services() {
   _run_or_fail "Starting Kubernetes worker" \
@@ -52,7 +66,7 @@ apiVersion: kubeproxy.config.k8s.io/v1alpha1
 clientConnection:
   kubeconfig: "/var/lib/kube-proxy/kubeconfig"
 mode: "iptables"
-clusterCIDR: "10.200.0.0/16"
+clusterCIDR: "CLUSTER_POD_CIDR"
 MANIFEST
 )
   _run_or_fail "Moving kube-proxy certificates" \
@@ -68,7 +82,12 @@ MANIFEST
 
   _run_or_fail "Setting kube-proxy" \
     "Failed to set kube-proxy" \
-    "sudo mv $(basename $temp_file) /var/lib/kube-proxy/kube-proxy-config.yaml" &&
+    "$(cat <<COMMANDS
+mac=\$(cat /sys/class/net/eth0/address); \
+sed -i "s#CLUSTER_POD_CIDR#$KUBERNETES_POD_CIDR#g" "$(basename $temp_file)"; \
+sudo mv $(basename $temp_file) /var/lib/kube-proxy/kube-proxy-config.yaml;
+COMMANDS
+)" &&
   _create_systemd_service_on_kubernetes_workers "$systemd_definition" \
     "kube-proxy"
 }
@@ -84,6 +103,7 @@ Requires=containerd.service
 
 [Service]
 ExecStart=/usr/local/bin/kubelet \\
+  --allow-privileged=true \\
   --config=/var/lib/kubelet/kubelet-config.yaml \\
   --container-runtime=remote \\
   --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock \\
@@ -114,7 +134,7 @@ authorization:
 clusterDomain: "cluster.local"
 clusterDNS:
   - "10.32.0.10"
-podCIDR: "MY_CIDR"
+podCIDR: "POD_CIDR"
 runtimeRequestTimeout: "15m"
 tlsCertFile: "/var/lib/kubelet/MY_HOSTNAME.pem"
 tlsPrivateKeyFile: "/var/lib/kubelet/MY_HOSTNAME-key.pem"
@@ -139,10 +159,7 @@ COMMANDS
   _run_or_fail "Setting kubelet" \
     "Failed to set kubelet" \
     "$(cat <<COMMANDS
-metadata="http://169.254.169.254/latest/meta-data" && \
-mac="\$(curl -s \$metadata/network/interfaces/macs/ | head -n1 | tr -d '/')" && \
-subnet_cidr="\$(curl -s \$metadata/network/interfaces/macs/\$mac/subnet-ipv4-cidr-block/)" && \
-sed -i "s#MY_CIDR#\$subnet_cidr#g" $(basename $temp_file) && \
+sed -i "s#POD_CIDR#\$(cat pod_cidr)#g" $(basename $temp_file) && \
 sed -i "s/MY_HOSTNAME/\$(hostname -s)/g" $(basename $temp_file) && \
 sudo mv $(basename $temp_file) /var/lib/kubelet/kubelet-config.yaml
 COMMANDS
@@ -234,7 +251,7 @@ create_bridge_network_definition() {
   "ipam": {
       "type": "host-local",
       "ranges": [
-        [{"subnet": "MY_CIDR"}]
+        [{"subnet": "POD_CIDR"}]
       ],
       "routes": [{"dst": "0.0.0.0/0"}]
   }
@@ -248,11 +265,9 @@ NET_DEF
   _run_or_fail "Setting bridge network definition in net.d" \
     "Failed to set the bridge network." \
     "$(cat <<COMMANDS
-set -x; \
-metadata="http://169.254.169.254/latest/meta-data" && \
-mac="\$(curl -s \$metadata/network/interfaces/macs/ | head -n1 | tr -d '/')" && \
-subnet_cidr="\$(curl -s \$metadata/network/interfaces/macs/\$mac/subnet-ipv4-cidr-block/)" && \
-sed -i "s#MY_CIDR#\$subnet_cidr#g" $(basename $temp_file) && \
+mac=\$(cat /sys/class/net/eth0/address); \
+subnet_cidr="\$(curl -sL http://169.254.169.254/latest/meta-data/network/interfaces/macs/\$mac/subnet-ipv4-cidr-block)"; \
+sed -i "s#POD_CIDR#\$(cat pod_cidr)#g" $(basename $temp_file) && \
 sudo mv $(basename $temp_file) /etc/cni/net.d/10-bridge.conf
 COMMANDS
 )"
@@ -368,14 +383,7 @@ install_dependencies() {
   _run_or_fail "Installing system dependencies" \
     "Failed to install systtem dependencies" \
     "$(cat <<REMOTE_COMMANDS
-DEPENDENCIES="socat,conntrack,ipset"
-for dep in \$(echo "\$DEPENDENCIES" | tr ',' '\n'); \
-do \
-  if ! which "\$dep" &>/dev/null; \
-  then \
-    sudo apt-get -y install "\$dep"; \
-  fi; \
-done
+sudo apt-get -y install socat conntrack ipset
 REMOTE_COMMANDS
 )"
 }
@@ -393,6 +401,7 @@ _run_or_fail() {
 }
 
 update_apt_cache &&
+  generate_pod_cidrs_for_each_worker && 
   install_dependencies &&
   install_kubernetes_binaries &&
   install_crictl &&

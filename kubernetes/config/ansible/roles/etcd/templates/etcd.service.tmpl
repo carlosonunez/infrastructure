@@ -1,0 +1,11 @@
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+ExecStart={{ etcd_start_command }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

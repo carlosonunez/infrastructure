@@ -28,10 +28,10 @@ SUBSTITUTIONS
   command_to_run=$(cat <<COPY_ETCD_SERVICE_AND_FILL_IN_TEMPLATE
 file_to_manipulate=/home/$SSH_USER_NAME/$temp_file_name; \
 eval "$substitution_commands_to_run"; \
+sed -i "s#CLUSTER_CIDR#$KUBERNETES_POD_CIDR#g" "\$file_to_manipulate"; \
 sudo cp "\$file_to_manipulate" /etc/systemd/system/$name_of_service.service
 COPY_ETCD_SERVICE_AND_FILL_IN_TEMPLATE
 )
-  >&2 echo "DEBUG: Running: $command_to_run"
   if ! _run_command_on_all_kubernetes_controllers "$command_to_run"
   then
     >&2 echo "ERROR: Failed to create the service definition for $name_of_service."

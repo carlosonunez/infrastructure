@@ -28,6 +28,12 @@ resource "aws_security_group" "kubernetes_clusters" {
     self = true
   }
   ingress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = [ "${var.kubernetes_pod_cidr_block}" ]
+  }
+  ingress {
     from_port = 22
     to_port = 22
     protocol = "tcp"

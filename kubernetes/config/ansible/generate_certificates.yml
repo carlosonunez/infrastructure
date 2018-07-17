@@ -1,0 +1,41 @@
+---
+- hosts: localhost
+  connection: local
+  roles:
+    - common
+
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Ensure that we have all of the env vars that we need
+      fail:
+        msg: "{{ item }} is not defined. Please define it in your .env."
+      when: lookup('env', item) == ""
+      with_items:
+        - AWS_ACCESS_KEY_ID
+        - AWS_SECRET_ACCESS_KEY
+        - KUBERNETES_CERTIFICATE_S3_BUCKET
+        - KUBERNETES_CERTIFICATE_S3_KEY
+        - ENVIRONMENT_NAME
+
+    - name: Expose the AWS S3 bucket name to store our certs in
+      set_fact:
+        environment_name: "{{ lookup('env', 'ENVIRONMENT_NAME') }}"
+        s3_bucket: "{{ lookup('env', 'KUBERNETES_CERTIFICATE_S3_BUCKET') }}"
+        s3_key: "{{ lookup('env', 'KUBERNETES_CERTIFICATE_S3_KEY') }}"
+
+    - name: Provision our certificates.
+      include: generate_single_certificate.yml
+      vars:
+        certificate_s3_bucket: "{{ s3_bucket }}"
+        certificate_s3_key: "{{ s3_key }}"
+      loop_control:
+        loop_var: certificate_csr_name
+      loop:
+        - ca
+        - admin
+        - kube-controller-manager
+        - kube-proxy
+        - kube-scheduler
+        - service-account
+        - kubernetes
