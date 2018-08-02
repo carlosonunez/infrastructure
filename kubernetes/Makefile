@@ -77,6 +77,7 @@ deploy_cluster:
 	TERRAFORM_ARGS=-force-copy $(MAKE) terraform_init && \
 	$(MAKE) terraform_validate && \
 	$(MAKE) deploy_terraform_plan && \
+	$(MAKE) disable_source_dest_checks && \
 	$(MAKE) perform_local_post_deployment_steps && \
 	$(MAKE) check_that_kubernetes_has_started && \
 	$(MAKE) build_tools_image && \
@@ -155,7 +156,17 @@ recycle_etcd_cluster:
 	build_config_mgmt_image \
 	perform_local_post_deployment_steps \
 	prepare_local_environment \
-	run_configuration_manually
+	run_configuration_manually \
+	disable_source_dest_checks
+
+disable_source_dest_checks:
+	aws ec2 describe-instances \
+		--filter "Name=instance-state-name,Values=running" \
+		--query "Reservations[*].Instances[*].InstanceId" \
+		--output text | \
+			xargs -I {} aws ec2 modify-instance-attribute \
+				--instance-id {} \
+				--no-source-dest-check
 
 build_config_mgmt_image:
 	if [ "$(SKIP_BUILDING_IMAGES)" == "true" ]; \
