@@ -1,0 +1,16 @@
+{
+  "CN": "admin",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "{{ kubernetes_ca_country_code }}",
+      "L": "{{ kubernetes_ca_location_code }}",
+      "O": "system:masters",
+      "OU": "{{ kubernetes_ca_ou_code }}",
+      "ST": "{{ kubernetes_ca_state_code }}"
+    }
+  ]
+}

@@ -2,13 +2,14 @@
 MAKEFLAGS += --always-make
 MAKEFLAGS += --silent
 SHELL := /usr/bin/env bash
+ENVIRONMENT_FILE ?= .env
 
-ifeq ("$(wildcard .env)","")
+ifeq ("$(wildcard $(ENVIRONMENT_FILE))","")
 $(error "Please create a .env.")
 endif
 
-include .env
-export $(shell cat .env | grep "^\#" | cut -f1 -d '=')
+include $(ENVIRONMENT_FILE)
+export $(shell cat $(ENVIRONMENT_FILE)| grep "^\#" | cut -f1 -d '=')
 
 ifeq ($(AWS_ACCESS_KEY_ID),)
 $(error Please provide an access key to an AWS account)
@@ -22,238 +23,315 @@ endif
 ifeq ($(TERRAFORM_STATE_S3_KEY),)
 $(error Please provide the S3 key for the TERRAFORM_STATE_S3_BUCKET)
 endif
+ifeq ($(KUBERNETES_POD_CIDR),)
+$(error Please define a CIDR to use for allocating Pods within your cluster.)
+endif
 
+PROJECT_PATH := $(shell echo "$$(git rev-parse --show-toplevel)")/kubernetes
+SCRIPTS_PATH := $(PROJECT_PATH)/include/scripts
 AWS_REGION ?= us-east-1
+BATS_DOCKER_IMAGE ?= graze/bats
+CERTIFICATE_DOWNLOAD_DIRECTORY ?= /tmp
+CONFIG_MGMT_IMAGE ?= williamyeh/ansible:alpine3
+CONFIG_MGMT_LINT_TOOL_COMMAND ?= sh -c 'find /work/ansible -type f -name "*.yml" | xargs -r ansible-lint --force-color'
+CONFIG_MGMT_LINT_TOOL_IMAGE ?= yokogawa/ansible-lint
+CONFIG_MGMT_PATH := $(PROJECT_PATH)/config
+CONFIG_MGMT_TOOL ?= ansible
+CONTROL_PLANE_SOURCE_PATH := $(PROJECT_PATH)/control_plane
 DOCKER_HUB_USERNAME ?= carlosonunez
 DRY_RUN ?= false
-BATS_DOCKER_IMAGE ?= graze/bats
-TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
-KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
-NUMBER_OF_AVAILABILITY_ZONES ?= 3
 ENVIRONMENT_NAME ?= develop
-SSH_DELAY_IN_SECONDS ?= 60
+KUBERNETES_GIT_BRANCH ?= master
+KUBERNETES_STARTUP_DELAY_MINUTES ?= 10
+KUBERNETES_TOOLS_DOCKER_IMAGE_TAG ?= k8s_tools
 KUBERNETES_TOOLS_IMAGE_NAME := $(DOCKER_HUB_USERNAME)/$(KUBERNETES_TOOLS_DOCKER_IMAGE_TAG)
-KUBERNETES_TOOLS_SOURCE_PATH := $(shell \
-	echo "$$(git rev-parse --show-toplevel)/kubernetes/tools")
-CONTROL_PLANE_SOURCE_PATH := $(shell \
-	echo "$$(git rev-parse --show-toplevel)/kubernetes/control_plane")
-SCRIPTS_PATH := $(shell \
-	echo "$$(git rev-parse --show-toplevel)/kubernetes/include/scripts")
+KUBERNETES_TOOLS_SOURCE_PATH := $(PROJECT_PATH)/tools
+NUMBER_OF_AVAILABILITY_ZONES ?= 3
 PRIVATE_KEY_PATH_VARIABLE := temporary_key_path
-PREREQUISITES="jq,parallel,aws"
+SKIP_BUILDING_IMAGES ?= false
+SKIP_LOCAL_ENVIRONMENT_PREP ?= false
+SSH_DELAY_IN_SECONDS ?= 60
+TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
 
 .PHONY: \
 	deploy_cluster \
+	deploy_cluster \
 	deploy_tools_image \
-	destroy_cluster
+	destroy_cluster \
+	generate_certificate_token \
+	get_certificate_token \
+	recycle_cluster \
+	recycle_nodes \
+	recycle_controllers \
+	recycle_workers \
+	recycle_etcd_cluster
 
+# TODO: Add certificate stuff back
 deploy_cluster:
-	$(MAKE) check_prerequisites && \
-	$(MAKE) deploy_tools_image && \
-	$(MAKE) generate_base_certificates && \
+	$(MAKE) generate_certificate_token && \
+	$(MAKE) build_config_mgmt_image && \
+	$(MAKE) lint_configuration && \
+	$(MAKE) prepare_local_environment && \
 	$(MAKE) configure_terraform && \
 	$(MAKE) configure_terraform_tags && \
 	TERRAFORM_ARGS=-force-copy $(MAKE) terraform_init && \
 	$(MAKE) terraform_validate && \
 	$(MAKE) deploy_terraform_plan && \
-	$(MAKE) wait_for_ssh && \
-	$(MAKE) copy_worker_certificates && \
-	$(MAKE) copy_control_plane_certificates && \
-	$(MAKE) generate_kubeconfigs && \
-	$(MAKE) generate_data_encryption_config_and_key && \
-	$(MAKE) bootstrap_etcd_cluster && \
-	$(MAKE) bootstrap_kubernetes_control_plane && \
-	$(MAKE) enable_rbac && \
-	$(MAKE) bootstrap_kubernetes_workers && \
-	$(MAKE) enable_remote_access
-
-deploy_tools_image:
+	$(MAKE) disable_source_dest_checks && \
+	$(MAKE) perform_local_post_deployment_steps && \
+	$(MAKE) check_that_kubernetes_has_started && \
 	$(MAKE) build_tools_image && \
-	$(MAKE) test_tools_image
+	$(MAKE) create_kubectl_convenience_script && \
+	echo "Your Kubernetes cluster is ready at $$($(MAKE) get_kubernetes_api_public_address)."
 
-destroy_cluster: destroy_terraform_plan
-
-.PHONY: \
-	generate_base_certificates \
-	copy_%_certificates \
-	generate_kubeconfigs \
-	generate_data_encryption_config_and_key \
-	bootstrap_etcd_cluster \
-	bootstrap_kubernetes_control_plane \
-	refresh_public_ip \
-	enable_rbac \
-	bootstrap_kubernetes_workers \
-	enable_remote_access
-
-enable_remote_access:
-	KUBERNETES_MASTER_LB_DNS_ADDRESS=$$($(MAKE) get_lb_address) \
-	DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
-	ENV_FILE=.env \
-	$(SCRIPTS_PATH)/enable_remote_access.bash
-
-enable_rbac:
-	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
-	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
-		SSH_PRIVATE_KEY_PATH=$$private_key_path \
-		ENV_FILE=.env \
-		$(SCRIPTS_PATH)/enable_cluster_rbac.sh
-
-refresh_public_ip:
+destroy_cluster: 
 	$(MAKE) configure_terraform && \
-	$(MAKE) deploy_terraform_plan
-	
-bootstrap_kubernetes_workers:
-	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_worker_ip_addresses=$$(echo "$$all_addresses" | grep 'worker' | cut -f2 -d : | tr "\n" ','); \
-	KUBERNETES_WORKERS_PUBLIC_IP_ADDRESSES=$$kube_worker_ip_addresses \
-		SSH_PRIVATE_KEY_PATH=$$private_key_path \
-		ENV_FILE=.env \
-		$(SCRIPTS_PATH)/bootstrap_kubernetes_workers.sh
+	$(MAKE) configure_terraform_tags && \
+	$(MAKE) destroy_terraform_plan
 
+generate_certificate_token:
+	token=$$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 8); \
+	if ! cat $(ENVIRONMENT_FILE) | grep -q CERT_TOKEN; \
+	then \
+		echo "CERT_TOKEN=$$token" >> $(ENVIRONMENT_FILE); \
+	else \
+		sed -i "s/CERT_TOKEN=.*/CERT_TOKEN=$$token/" $(ENVIRONMENT_FILE); \
+	fi
 
-bootstrap_kubernetes_control_plane:
-	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
-	initial_etcd_cluster=$$($(MAKE) get_initial_etcd_cluster_addresses | tr "\n" ',' | sed 's/.$$//'); \
-	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
-		KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER=$$initial_etcd_cluster \
-		SSH_PRIVATE_KEY_PATH=$$private_key_path \
-		ENV_FILE=.env \
-		$(SCRIPTS_PATH)/bootstrap_kubernetes_control_plane.sh
+get_certificate_token:
+	cat $(ENVIRONMENT_FILE) | grep CERT_TOKEN | cut -f2 -d =
 
-bootstrap_etcd_cluster:
-	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
-	initial_etcd_cluster=$$($(MAKE) get_initial_etcd_cluster_addresses | tr "\n" ','); \
-	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
-		SSH_PRIVATE_KEY_PATH=$$private_key_path \
-		KUBERNETES_CONTROL_PLANE_ETCD_INITIAL_CLUSTER=$$initial_etcd_cluster \
-		ENV_FILE=.env \
-		$(SCRIPTS_PATH)/bootstrap_etcd_cluster.sh
+recycle_cluster:
+	$(MAKE) destroy_cluster && $(MAKE) deploy_cluster
 
-generate_data_encryption_config_and_key:
-	>&2 echo "INFO: Obtaining cluster IP addresses. Hang on a sec."; \
-	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
-		SSH_PRIVATE_KEY_PATH=$$private_key_path \
-		ENV_FILE=.env \
-		$(SCRIPTS_PATH)/create_data_encryption_key_and_config.sh
+recycle_nodes:
+	$(MAKE) configure_terraform && \
+	$(MAKE) configure_terraform_tags && \
+	targets=$$(TERRAFORM_ARGS=list make terraform_state | \
+					tr -d $$'\r' | \
+					grep 'aws_spot_instance' | \
+					sed 's/^/-target=/' | \
+					tr "\n" " "); \
+	TERRAFORM_ARGS="-auto-approve -force $$targets" $(MAKE) terraform_destroy && \
+		$(MAKE) deploy_cluster
 
-generate_kubeconfigs:
-	>&2 echo "INFO: Obtaining cluster IP addresses. Hang on a sec."; \
-	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	kubelet_ip_addresses=$$(echo "$$all_addresses" | grep 'worker' | cut -f2 -d : | tr "\n" ','); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
-	kube_lb_ip_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	SSH_PRIVATE_KEY_PATH=$$private_key_path \
-		DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
-		KUBELET_PUBLIC_IP_ADDRESSES=$$kubelet_ip_addresses \
-		KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
-		KUBERNETES_CONTROL_PLANE_LOAD_BALANCER_ADDRESS=$$kube_lb_ip_address \
-		ENV_FILE=.env \
-		$(SCRIPTS_PATH)/generate_and_upload_kubeconfigs.sh
+recycle_controllers:
+	$(MAKE) configure_terraform && \
+	$(MAKE) configure_terraform_tags && \
+	targets=$$(TERRAFORM_ARGS=list make terraform_state | \
+					tr -d $$'\r' | \
+					grep -E 'aws_spot_instance.*kubernetes_control_plane.*' | \
+					sed 's/^/-target=/' | \
+					tr "\n" " "); \
+	TERRAFORM_ARGS="-auto-approve -force $$targets" $(MAKE) terraform_destroy && \
+		$(MAKE) deploy_cluster
 
-copy_%_certificates:
-	node_type=$$(echo $@ | sed 's/copy_\(.*\)_certificates/\1/'); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	case "$$node_type" in \
-		worker) \
-			>&2 echo "INFO: Getting $${node_type} IP addresses; this might take a while."; \
-			target_to_invoke="get_$${node_type}_addresses"; \
-			if ! addresses=$$($(MAKE) "$$target_to_invoke"); \
-			then \
-				>&2 echo "ERROR: Failed to retrieve IP addresses; stopping."; \
-				exit 1; \
-			fi; \
-			number_of_workers=$$(echo "$$addresses" | wc -l | tr -d ' '); \
-			>&2 echo "INFO: This cluster has $$number_of_workers workers to copy certs to."; \
-			for ip_address_data in $$addresses; \
-			do \
-				ip_address=$$(echo "$$ip_address_data" | cut -f2 -d ':'); \
-				if ! NODE_TYPE="$$node_type" \
-					KUBELET_IP_ADDRESS="$$ip_address" \
-					ENV_FILE=.env \
-					DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
-					SSH_USER_NAME=$(SSH_USER_NAME) \
-					SSH_PRIVATE_KEY_PATH=$$private_key_path \
-					$(SCRIPTS_PATH)/copy_certificates.sh; \
-				then \
-					>&2 echo "ERROR: Failed to copy certificates to $$IP_ADDRESS"; \
-					exit 1; \
-				fi; \
-			done \
-			;; \
-		control_plane) \
-			>&2 echo "INFO: Getting $${node_type} IP addresses; this might take a while."; \
-			if ! ip_addresses=$$($(MAKE) get_$${node_type}_addresses | \
-				sed 's/controller://' | \
-				tr '\n' ',' \
-			); \
-			then \
-				>&2 echo "ERROR: Failed to retrieve IP addresses; stopping." ; \
-				exit 1; \
-			fi; \
-			lb_address=$$($(MAKE) get_lb_address | sed 's/lb://'); \
-			if ! NODE_TYPE="$$node_type" \
-				KUBERNETES_MASTER_IP_ADDRESSES="$$ip_addresses" \
-				KUBERNETES_MASTER_LB_DNS_ADDRESS="$$lb_address" \
-				ENV_FILE=.env \
-				DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
-				SSH_USER_NAME=$(SSH_USER_NAME) \
-				SSH_PRIVATE_KEY_PATH=$$private_key_path \
-				$(SCRIPTS_PATH)/copy_certificates.sh; \
-			then \
-				>&2 echo "ERROR: Failed to copy certificates to the control plane nodes."; \
-				exit 1; \
-			fi; \
-			;; \
-		*) \
-			>&2 echo "ERROR: Unexpected type $$node_type"; \
-			exit 1; \
-			;; \
-	esac
+recycle_workers:
+	$(MAKE) configure_terraform && \
+	$(MAKE) configure_terraform_tags && \
+	targets=$$(TERRAFORM_ARGS=list make terraform_state | \
+					tr -d $$'\r' | \
+					grep -E 'aws_spot_instance.*kubernetes_workers.*' | \
+					sed 's/^/-target=/' | \
+					tr "\n" " "); \
+	TERRAFORM_ARGS="-auto-approve -force $$targets" $(MAKE) terraform_destroy && \
+		$(MAKE) deploy_cluster
 
-generate_base_certificates:
-	DOCKER_IMAGE=$(KUBERNETES_TOOLS_IMAGE_NAME) \
-		 ENV_FILE=.env \
-		 $(SCRIPTS_PATH)/generate_base_certificates.sh
+recycle_etcd_cluster:
+	$(MAKE) configure_terraform && \
+	$(MAKE) configure_terraform_tags && \
+	targets=$$(TERRAFORM_ARGS=list make terraform_state | \
+					tr -d $$'\r' | \
+					grep -E 'aws_spot_instance.*etcd.*' | \
+					sed 's/^/-target=/' | \
+					tr "\n" " "); \
+	TERRAFORM_ARGS="-auto-approve -force $$targets" $(MAKE) terraform_destroy && \
+		$(MAKE) deploy_cluster
+
 
 .PHONY: \
-	get_cluster_addresses \
+	build_config_mgmt_image \
+	lint_configuration \
+	test_configuration \
+	build_config_mgmt_image \
+	perform_local_post_deployment_steps \
+	prepare_local_environment \
+	run_configuration_manually \
+	disable_source_dest_checks
+
+disable_source_dest_checks:
+	aws ec2 describe-instances \
+		--filter "Name=instance-state-name,Values=running" \
+		--query "Reservations[*].Instances[*].InstanceId" \
+		--output text | \
+			xargs -I {} aws ec2 modify-instance-attribute \
+				--instance-id {} \
+				--no-source-dest-check
+
+build_config_mgmt_image:
+	if [ "$(SKIP_BUILDING_IMAGES)" == "true" ]; \
+	then \
+		exit 0; \
+	fi; \
+	image_name=$(DOCKER_HUB_USERNAME)/$(CONFIG_MGMT_TOOL); \
+	context_path=$(CONFIG_MGMT_PATH)/$(CONFIG_MGMT_TOOL); \
+	>&2 echo "INFO: Building Ansible image: $$image_name"; \
+		docker build -q -t $$image_name \
+			-f $$context_path/Dockerfile \
+			$$context_path >/dev/null
+
+lint_configuration:
+	docker run --tty \
+		--rm \
+		--volume $$PWD/config:/work \
+		"$(CONFIG_MGMT_LINT_TOOL_IMAGE)" $(CONFIG_MGMT_LINT_TOOL_COMMAND)
+
+run_configuration_manually:
+	image_name=$(DOCKER_HUB_USERNAME)/$(CONFIG_MGMT_TOOL); \
+	docker run --tty \
+		--interactive \
+		--rm \
+		--env "CONFIG_MGMT_DOCKER_IMAGE=$$image_name" \
+		--env "CONFIG_MGMT_CODE_PATH=$(CONFIG_MGMT_PATH)/$(CONFIG_MGMT_TOOL)" \
+		--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
+		--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
+		--env "AWS_REGION=$(AWS_REGION)" \
+		--env-file $(ENVIRONMENT_FILE) \
+		--entrypoint sh \
+		--volume $$(which docker):/usr/local/bin/docker \
+		--volume /var/run/docker.sock:/var/run/docker.sock \
+		--volume $$PWD/config/$(CONFIG_MGMT_TOOL):/work \
+		--workdir /work \
+		"$$image_name"
+
+test_configuration:
+	image_name=$(DOCKER_HUB_USERNAME)/$(CONFIG_MGMT_TOOL); \
+	docker run --tty \
+		--rm \
+		--env "CONFIG_MGMT_DOCKER_IMAGE=$$image_name" \
+		--env "CONFIG_MGMT_CODE_PATH=$(CONFIG_MGMT_PATH)/$(CONFIG_MGMT_TOOL)" \
+		--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
+		--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
+		--env "AWS_REGION=$(AWS_REGION)" \
+		--env-file $(ENVIRONMENT_FILE) \
+		--entrypoint sh \
+		--volume $$(which docker):/usr/local/bin/docker \
+		--volume /var/run/docker.sock:/var/run/docker.sock \
+		--volume $$PWD/config/$(CONFIG_MGMT_TOOL):/work \
+		--workdir /work \
+		"$$image_name" -c "/work/test.sh $(KUBERNETES_ROLE_TO_TEST)"
+
+perform_local_post_deployment_steps:
+	image_name=$(DOCKER_HUB_USERNAME)/$(CONFIG_MGMT_TOOL); \
+	docker run --tty \
+		--rm \
+		--env "CONFIG_MGMT_DOCKER_IMAGE=$$image_name" \
+		--env "CONFIG_MGMT_CODE_PATH=$(CONFIG_MGMT_PATH)/$(CONFIG_MGMT_TOOL)" \
+		--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
+		--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
+		--env "AWS_REGION=$(AWS_REGION)" \
+		--env-file $(ENVIRONMENT_FILE) \
+		--entrypoint sh \
+		--volume $$(which docker):/usr/local/bin/docker \
+		--volume /var/run/docker.sock:/var/run/docker.sock \
+		--volume $$PWD/config/$(CONFIG_MGMT_TOOL):/work \
+		--workdir /work \
+		"$$image_name" -c "/work/post_deploy.sh"
+
+prepare_local_environment:
+	if [ "$(SKIP_LOCAL_ENVIRONMENT_PREP)" == "true" ]; \
+	then \
+		exit 0; \
+	fi; \
+	image_name=$(DOCKER_HUB_USERNAME)/$(CONFIG_MGMT_TOOL); \
+	docker run --tty \
+		--rm \
+		--env "CONFIG_MGMT_DOCKER_IMAGE=$$image_name" \
+		--env "CONFIG_MGMT_CODE_PATH=$(CONFIG_MGMT_PATH)/$(CONFIG_MGMT_TOOL)" \
+		--env "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)" \
+		--env "AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)" \
+		--env "AWS_REGION=$(AWS_REGION)" \
+		--env-file $(ENVIRONMENT_FILE) \
+		--entrypoint sh \
+		--volume $$(which docker):/usr/local/bin/docker \
+		--volume /var/run/docker.sock:/var/run/docker.sock \
+		--volume $$PWD/config/$(CONFIG_MGMT_TOOL):/work \
+		--workdir /work \
+		"$$image_name" -c "/work/setup.sh $(ADDITIONAL_SETUP_OPTIONS)"
+
+.PHONY: \
 	get_control_plane_addresses \
 	get_worker_addresses \
-	get_lb_address \
-	get_initial_etcd_cluster_addresses
+	get_etcd_node_addresses \
+	get_kubernetes_api_public_address \
+	check_that_kubernetes_has_started
 
-get_initial_etcd_cluster_addresses:
-	all_addresses=$$($(MAKE) get_cluster_addresses); \
-	private_key_path=$$($(MAKE) get_private_key_path); \
-	kube_controller_ip_addresses=$$(echo "$$all_addresses" | grep 'controller' | cut -f2 -d : | tr "\n" ','); \
-	KUBERNETES_CONTROLLERS_PUBLIC_IP_ADDRESSES=$$kube_controller_ip_addresses \
-		SSH_PRIVATE_KEY_PATH=$$private_key_path \
-		ENV_FILE=.env \
-		$(SCRIPTS_PATH)/get_initial_etcd_cluster_addresses.sh
-
-get_cluster_addresses:
-	ENV_FILE=.env $(SCRIPTS_PATH)/get_cluster_addresses.sh; \
-	$(MAKE) get_lb_address
+get_kubernetes_api_public_address:
+	TERRAFORM_ARGS="kubernetes_control_plane_dns_address" $(MAKE) terraform_output | \
+		tr -d $$'\r'
 
 get_worker_addresses:
-	$(MAKE) get_cluster_addresses | grep 'worker'
+	aws ec2 describe-instances --filter "Name=tag:kubernetes_role,Values=worker" \
+		"Name=instance-state-name,Values=running" \
+		--query "Reservations[*].Instances[*].PublicIpAddress[]" --output text | \
+		sed 's/[ \t]\+/ /g' | \
+		tr ' ' '\n'
 
 get_control_plane_addresses:
-	$(MAKE) get_cluster_addresses | grep 'controller'
+	aws ec2 describe-instances --filter "Name=tag:kubernetes_role,Values=controller" \
+		"Name=instance-state-name,Values=running" \
+		--query "Reservations[*].Instances[*].PublicIpAddress[]" --output text | \
+		sed 's/[ \t]\+/ /g' | \
+		tr ' ' '\n'
 
-get_lb_address:
-	echo "lb:kubernetes.$(DOMAIN_NAME)"
+get_etcd_node_addresses:
+	aws ec2 describe-instances --filter "Name=tag:kubernetes_role,Values=etcd" \
+		"Name=instance-state-name,Values=running" \
+		--query "Reservations[*].Instances[*].PublicIpAddress[]" --output text | \
+		sed 's/[ \t]\+/ /g' | \
+		tr ' ' '\n'
+
+check_that_kubernetes_has_started:
+	echo "Waiting for Kubernetes to start. \
+This can take up to $(KUBERNETES_STARTUP_DELAY_MINUTES) minutes to complete."; \
+	max_seconds_to_wait=$$(($(KUBERNETES_STARTUP_DELAY_MINUTES)*60)); \
+	seconds_elapsed=0; \
+	while [ "$$seconds_elapsed" -lt "$$max_seconds_to_wait" ]; \
+	do \
+		kubernetes_address=$$($(MAKE) get_control_plane_addresses | sort -R | head -1); \
+		if ! nc -z "$$kubernetes_address" 22 &>/dev/null; \
+		then \
+			>&2 echo "WARN: Kubernetes hasn't started yet at: $$kubernetes_address"; \
+			sleep 30; \
+			seconds_elapsed=$$((seconds_elapsed+30)); \
+		else \
+			seconds_elapsed=0; \
+			echo -ne '\007'; \
+			>&2 echo "INFO: You can now SSH into the Kubernetes control plane. Waiting $$max_seconds_to_wait seconds for kube-apiserver"; \
+			kubernetes_api_address=$$($(MAKE) get_kubernetes_api_public_address); \
+			while [ "$$seconds_elapsed" -lt "$$max_seconds_to_wait" ]; \
+			do \
+				if curl -skL https://$$kubernetes_api_address:6443/version | grep -q	 "gitCommit"; \
+				then \
+					for i in $$(seq 1 3); \
+					do \
+						echo -ne '\007'; \
+						sleep 0.25; \
+					done; \
+					>&2 echo "INFO: Kubernetes is ready."; \
+					exit 0; \
+				else \
+					>&2 echo "WARN: kube-apiserver isn't available yet."; \
+					sleep 30; \
+					seconds_elapsed=$$((seconds_elapsed+30)); \
+				fi; \
+			done; \
+		fi; \
+	done;
+	
+wait_for_ssh:
+	>&2 echo "Waiting $(SSH_DELAY_IN_SECONDS) seconds for hosts to accept SSH connections."; \
+	sleep $(SSH_DELAY_IN_SECONDS)
 
 .PHONY: \
 	configure_terraform \
@@ -264,19 +342,15 @@ get_lb_address:
 	destroy_terraform_plan \
 	wait_for_ssh
 
-wait_for_ssh:
-	>&2 echo "Waiting $(SSH_DELAY_IN_SECONDS) seconds for hosts to accept SSH connections."; \
-	sleep $(SSH_DELAY_IN_SECONDS)
-
 configure_terraform:
 	PRIVATE_KEY_PATH_VARIABLE=$(PRIVATE_KEY_PATH_VARIABLE) \
-	ENV_FILE=.env \
+	ENV_FILE=$(ENVIRONMENT_FILE) \
 	$(SCRIPTS_PATH)/create_terraform_configuration.sh
 
 configure_terraform_tags:
 	TAGS_PATH=$(CONTROL_PLANE_SOURCE_PATH)/aws/tags \
 	TERRAFORM_TFVARS_PATH=$(CONTROL_PLANE_SOURCE_PATH)/aws/terraform.tfvars \
-	ENV_FILE=.env \
+	ENV_FILE=$(ENVIRONMENT_FILE) \
 	$(SCRIPTS_PATH)/generate_tags.bash
 
 get_private_key_path:
@@ -287,7 +361,8 @@ get_private_key_path:
 
 terraform_%:
 	action=$$(echo $@ | sed 's/terraform_//') && \
-	docker run --rm --volume "$(CONTROL_PLANE_SOURCE_PATH)/aws:/infra" \
+	docker run --tty \
+		--rm --volume "$(CONTROL_PLANE_SOURCE_PATH)/aws:/infra" \
 		--env-file .env \
 		--env AWS_ACCESS_KEY_ID \
 		--env AWS_SECRET_ACCESS_KEY \
@@ -317,37 +392,69 @@ destroy_terraform_plan:
 	deploy_tools_image
 
 build_tools_image:
-	>&2 echo "INFO: Building image $(KUBERNETES_TOOLS_IMAGE_NAME)"; \
-	docker build -t $(KUBERNETES_TOOLS_IMAGE_NAME) \
+	if [ "$(SKIP_BUILDING_IMAGES)" == "true" ]; \
+	then \
+		exit 0; \
+	fi; \
+	>&2 echo "INFO: Building Kubernetes tools image: $(KUBERNETES_TOOLS_IMAGE_NAME)"; \
+	docker build -q -t $(KUBERNETES_TOOLS_IMAGE_NAME) \
 		-f $(KUBERNETES_TOOLS_SOURCE_PATH)/Dockerfile \
-		$(KUBERNETES_TOOLS_SOURCE_PATH)
+		$(KUBERNETES_TOOLS_SOURCE_PATH) >/dev/null && \
+	$(MAKE) test_tools_image
 
 test_tools_image:
-	docker run --rm --volume $(KUBERNETES_TOOLS_SOURCE_PATH):/app \
+	docker run --tty --rm --volume $(KUBERNETES_TOOLS_SOURCE_PATH):/app \
 		--volume /var/run/docker.sock:/var/run/docker.sock \
 		--workdir /app \
 		--env DOCKER_IMAGE_UNDER_TEST=$(KUBERNETES_TOOLS_IMAGE_NAME) \
 		$(BATS_DOCKER_IMAGE) /app/tests
 
-.PHONY: check_prerequisites
+.PHONY: \
+	ssh_into_kubernetes_worker \
+	ssh_into_kubernetes_controller \
+	ssh_into_etcd_node
 
-check_prerequisites:
-	set -e; \
-	for binary in $$(echo "$(PREREQUISITES)" | tr ',' '\n'); \
+ssh_into_kubernetes_worker:
+	$(MAKE) get_worker_addresses | \
+		sort -R | \
+		head -1 | \
+		xargs -I {} echo "ssh -i /tmp/kubernetes_cluster_ssh_key $(SSH_USER_NAME)@{}"
+
+ssh_into_kubernetes_controller:
+	$(MAKE) get_control_plane_addresses | \
+		sort -R | \
+		head -1 | \
+		xargs -I {} echo "ssh -i /tmp/kubernetes_cluster_ssh_key $(SSH_USER_NAME)@{}"
+	
+ssh_into_etcd_node:
+	$(MAKE) get_etcd_node_addresses | \
+		sort -R | \
+		head -1 | \
+		xargs -I {} echo "ssh -i /tmp/kubernetes_cluster_ssh_key $(SSH_USER_NAME)@{}"
+
+.PHONY: \
+	get_kubernetes_certificates \
+	create_kubectl_convenience_script
+
+get_kubernetes_certificates:
+	certificate_download_directory=$(CERTIFICATE_DOWNLOAD_DIRECTORY); \
+	cert_token=$$($(MAKE) get_certificate_token); \
+	for cert_name in ca admin admin-key; \
 	do \
-		if ! which "$$binary" &>/dev/null; \
-		then \
-			>&2 echo "ERROR: You're missing this: $$binary"; \
-			exit 1; \
-		fi; \
-	done; \
-	if [ ! -z "$$(man sed | cat | tail -n 1 | grep BSD)" ]; \
-	then \
-		>&2 echo -e "ERROR: It seems that you're running this on a Mac with the \
-default version of sed installed. You'll need the GNU version of sed to \
-proceed with this installer.\n\n \
-To do that, install Homebrew (go to https://brew.sh if you don't have it) \
-and run this:\n\n \
-\`brew install gnu-sed --with-default-names\`."; \
-		exit 1; \
-	fi
+		rm $(CERTIFICATE_DOWNLOAD_DIRECTORY)/$$cert_name.pem 2>/dev/null; \
+		aws s3 cp \
+			s3://$(KUBERNETES_CERTIFICATE_S3_BUCKET)/$(KUBERNETES_CERTIFICATE_S3_KEY)/$(ENVIRONMENT_NAME)/$${cert_token}-$${cert_name}.pem \
+			"$${certificate_download_directory}/$${cert_name}.pem"; \
+	done
+
+create_kubectl_convenience_script:
+	$(MAKE) get_kubernetes_certificates && \
+	kubectl_script_location=$$PWD; \
+	rm -f $$kubectl_script_location/kubectl && \
+	echo "docker run -it --env USER_CERT_PRIVATE_KEY=/certs/admin-key.pem \
+		--env KUBERNETES_CLUSTER_ADDRESS=$$($(MAKE) get_kubernetes_api_public_address) \
+		--env KUBERNETES_CLUSTER_NAME=$(KUBERNETES_CLUSTER_NAME) \
+		--volume $(CERTIFICATE_DOWNLOAD_DIRECTORY):/certs \
+		$(KUBERNETES_TOOLS_IMAGE_NAME) kubectl \$$@" > "$$kubectl_script_location/kubectl" && \
+	chmod +x $$kubectl_script_location/kubectl && \
+	>&2 echo "INFO: kubectl is located at: $$kubectl_script_location/kubectl."

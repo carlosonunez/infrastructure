@@ -1,0 +1,195 @@
+- name: Start the playbook
+  debug:
+    msg: "Waiting for {{ expected_controllers }} to start."
+
+- name: Discover other controllers in this control plane.
+  ec2_instance_facts:
+    filters:
+      instance-state-name: running
+      "tag:kubernetes_role": controller
+  register: found_controllers
+  until: ( found_controllers.instances | length ) ==  ( expected_controllers | int )
+  retries: 20
+  delay: 5
+
+- name: Create required directories
+  file:
+    state: directory
+    path: "{{ item }}"
+  with_items:
+    - /etc/kubernetes/config
+    - /var/lib/kubernetes
+
+- name: Fetch relevant certificates.
+  aws_s3:
+    mode: get
+    bucket: "{{ certificate_s3_bucket }}"
+    object: "{{ certificate_s3_key }}/{{ environment_name }}/{{ certificate_token }}-{{ item }}"
+    dest: "/var/lib/kubernetes/{{ item }}"
+  retries: 5
+  delay: 5
+  with_items:
+    - ca.pem
+    - ca-key.pem
+    - kubernetes-key.pem
+    - kubernetes.pem
+    - kube-controller-manager.pem
+    - kube-controller-manager-key.pem
+    - kube-scheduler.pem
+    - kube-scheduler-key.pem
+    - service-account-key.pem
+    - service-account.pem
+    - admin-key.pem
+    - admin.pem
+
+- name: Generate required Kubeconfigs
+  include_tasks: "{{ ansible_home_directory }}/create_kubeconfig_for_service.yml"
+  vars:
+    kubeconfig_location: /var/lib/kubernetes
+    kubeconfig_name: "{{ kubernetes_component }}"
+    cluster_name: "{{ kubernetes_cluster_name }}"
+    user: "system:{{ kubernetes_component }}"
+    kubernetes_control_plane_server: "https://{{ kubernetes_public_address }}:{{ kubernetes_public_port }}"
+    client_certificate: "/var/lib/kubernetes/{{ kubernetes_component }}.pem"
+    client_key: "/var/lib/kubernetes/{{ kubernetes_component }}-key.pem"
+    certificate_authority_certificate_location: /var/lib/kubernetes
+  loop_control:
+    loop_var: kubernetes_component
+  with_items:
+    - kube-controller-manager
+    - kube-scheduler
+    - admin
+
+- name: Copy admin.kubeconfig to the home directory
+  copy:
+    src: /var/lib/kubernetes/admin.kubeconfig
+    dest: "{{ ansible_env.HOME }}/admin.kubeconfig"
+
+- name: Create an encryption key
+  shell: head -c 32 /dev/urandom | base64
+  register: command_result
+  failed_when: command_result.rc != 0
+
+- name: Set that key as a fact
+  set_fact:
+    encryption_key: "{{ command_result.stdout }}"
+
+- name: Generate encryption config
+  template:
+    src: templates/encryption-config.yaml.tmpl
+    dest: /var/lib/kubernetes/encryption-config.yaml
+
+- name: Download control plane binaries
+  get_url:
+    url: "{{ item }}"
+    dest: /usr/local/bin
+    mode: 0755
+  with_items:
+    - "{{ kube_apiserver_url }}"
+    - "{{ kube_controller_manager_url }}"
+    - "{{ kube_scheduler_url }}"
+
+- name: Verify that binaries are present
+  stat:
+    path: "/usr/local/bin/{{ item }}"
+  register: kube_binary
+  failed_when: not kube_binary.stat.exists
+  with_items:
+    - kube-apiserver
+    - kube-controller-manager
+    - kube-scheduler
+
+- name: Discover other etcd clusters in this cluster
+  ec2_instance_facts:
+    filters:
+      instance-state-name: running
+      "tag:kubernetes_role": etcd
+  register: found_instances
+
+- name: Save number of controllers
+  set_fact:
+    kubernetes_controller_count: "{{ found_controllers.instances | length }}"
+
+- name: Generate etcd initial cluster list
+  set_fact:
+    etcd_http_servers: "{% for instance in found_instances.instances %}https://{{instance.private_ip_address}}:2379,{% endfor %}"
+
+- name: Remove last comma from string
+  set_fact:
+    etcd_http_servers: "{{ etcd_http_servers[:-1] }}"
+
+- name: Create systemd services
+  template:
+    src: "templates/{{ item }}.service.tmpl"
+    dest: "/etc/systemd/system/{{ item }}.service"
+  with_items:
+    - kube-apiserver
+    - kube-controller-manager
+    - kube-scheduler
+
+- name: Create kube-scheduler configuration YAML
+  template:
+    src: templates/kube-scheduler.yaml.tmpl
+    dest: /etc/kubernetes/config/kube-scheduler.yaml
+
+- name: Start systemd services
+  systemd:
+    name: "{{ item }}"
+    state: started
+    daemon_reload: yes
+  with_items:
+    - kube-apiserver
+    - kube-controller-manager
+    - kube-scheduler
+
+- name: Enable health checks
+  block:
+    - name: Install nginx
+      package:
+        name: nginx
+
+    - name: Create health check site
+      template:
+        src: templates/kubernetes.default.svc.cluster.local.tmpl
+        dest: /etc/nginx/sites-available/kubernetes.default.svc.cluster.local
+
+    - name: Enable the site
+      file:
+        src: /etc/nginx/sites-available/kubernetes.default.svc.cluster.local
+        dest: /etc/nginx/sites-enabled/kubernetes.default.svc.cluster.local
+        state: link
+
+    - name: Start nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+- name: Wait 60 seconds for kube-apiserver to become available
+  shell: "kubectl get componentstatuses --kubeconfig /var/lib/kubernetes/admin.kubeconfig"
+  register: kubectl_result
+  until: kubectl_result == 0
+  retries: 60
+  delay: 1
+  failed_when: kubectl_result.rc != 0
+
+- name: Copy RBAC manifests
+  copy:
+    src: "files/{{ item }}.yaml"
+    dest: "/var/lib/kubernetes/{{ item }}.yaml"
+  with_items:
+    - clusterrole_kube_apiserver_to_kubelet
+    - clusterrolebinding_kube_apiserver_to_kubelet
+
+- name: Apply RBAC manifests
+  shell: "kubectl apply --kubeconfig /var/lib/kubernetes/admin.kubeconfig -f /var/lib/kubernetes/{{ item }}.yaml"
+  register: kubectl_result
+  with_items:
+    - clusterrole_kube_apiserver_to_kubelet
+    - clusterrolebinding_kube_apiserver_to_kubelet
+  failed_when: kubectl_result.rc != 0
+
+- name: Verify /healthz
+  uri:
+    url: http://127.0.0.1/healthz
+    headers:
+      Host: kubernetes.default.svc.cluster.local

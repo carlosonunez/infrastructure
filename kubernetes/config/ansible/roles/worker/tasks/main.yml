@@ -1,0 +1,231 @@
+---
+- name: Start the playbook
+  debug:
+    msg: "Waiting for {{ expected_workers }} to start."
+
+- name: Discover other workers in this control plane.
+  ec2_instance_facts:
+    filters:
+      instance-state-name: running
+      "tag:kubernetes_role": worker
+  register: found_workers
+  until: ( found_workers.instances | length ) ==  ( expected_workers | int )
+  retries: 20
+  delay: 5
+
+- name: Get route tables containing this instance.
+  ec2_vpc_route_table_facts:
+    region: "{{ ansible_ec2_placement_region }}"
+    filters:
+      route.instance-id: "{{ ansible_ec2_instance_id }}"
+  register: route_tables_found
+
+- name: Find Pod CIDR subnets associated with this instance
+  set_fact:
+    pod_cidr_subnet_for_this_worker: >
+      {% for route_table in route_tables_found.route_tables %}
+        {% for route in route_table.routes %}
+          {% if route.instance_id == ansible_ec2_instance_id %}
+            {{ route.destination_cidr_block }}
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+
+- name: Fix up Pod CIDR
+  set_fact:
+    pod_cidr_subnet_for_this_worker: "{{ pod_cidr_subnet_for_this_worker | replace(' ','') | replace ('\n', '') }}"
+
+- name: Get our VPC
+  uri:
+    url: "http://169.254.169.254/latest/meta-data/network/interfaces/macs/{{ ansible_default_ipv4.macaddress }}/vpc-id"
+    return_content: yes
+  register: vpc_id_metadata
+
+- name: Extract VPC from metadata
+  set_fact:
+    vpc_id: "{{ vpc_id_metadata.content }}"
+
+- name: Create required directories
+  file:
+    state: directory
+    path: "{{ item }}"
+  with_items:
+    - /var/lib/kubernetes
+    - /etc/containerd
+    - /etc/cni/net.d
+    - /opt/cni/bin
+    - /var/lib/kubelet
+    - /var/lib/kube-proxy
+    - /var/run/kubernetes
+
+- name: Fetch relevant certificates and store in the certificate volume.
+  aws_s3:
+    mode: get
+    bucket: "{{ certificate_s3_bucket }}"
+    object: "{{ certificate_s3_key }}/{{ environment_name }}/{{ certificate_token }}-{{ item }}"
+    dest: "{{ local_certificate_storage_path }}/{{ item }}"
+  with_items:
+    - ca.pem
+    - ca-key.pem
+    - kube-proxy.pem
+    - kube-proxy-key.pem
+
+- name: Copy CA certs into right place.
+  copy:
+    src: "{{ local_certificate_storage_path }}/{{ item }}"
+    dest: "/var/lib/kubernetes/{{ item }}"
+  with_items:
+    - ca.pem
+    - ca-key.pem
+    - kube-proxy.pem
+    - kube-proxy-key.pem
+
+- name: Generate worker certificate
+  include: "{{ ansible_home_directory }}/generate_single_certificate.yml"
+  vars:
+    skip_s3_upload: True
+  loop_control:
+    loop_var: certificate_csr_name
+  loop:
+    - worker
+
+- name: Copy instance certs into right place.
+  copy:
+    src: "{{ local_certificate_storage_path }}/{{ item }}"
+    dest: "/var/lib/kubelet/{{ item }}"
+  with_items:
+    - "{{ system_hostname }}.pem"
+    - "{{ system_hostname }}-key.pem"
+
+- name: Create the kubeconfig for this instance.
+  include_tasks: "{{ ansible_home_directory }}/create_kubeconfig_for_service.yml"
+  vars:
+    kubeconfig_location: "/var/lib/kubelet"
+    kubeconfig_name: "{{ system_hostname }}"
+    cluster_name: "{{ kubernetes_cluster_name }}"
+    user: "system:node:{{ system_hostname }}"
+    kubernetes_control_plane_server: "https://{{ kubernetes_public_address }}:{{ kubernetes_public_port }}"
+    client_certificate: "{{ local_certificate_storage_path }}/{{ system_hostname }}.pem"
+    client_key: "{{ local_certificate_storage_path }}/{{ system_hostname }}-key.pem"
+    certificate_authority_certificate_location: /var/lib/kubernetes
+
+- name: Move to correct location
+  copy:
+    src: "/var/lib/kubelet/{{ system_hostname }}.kubeconfig"
+    dest: "/var/lib/kubelet/kubeconfig"
+
+- name: Create the kubeconfig for kube-proxy
+  include_tasks: "{{ ansible_home_directory }}/create_kubeconfig_for_service.yml"
+  vars:
+    kubeconfig_location: "/var/lib/kube-proxy"
+    kubeconfig_name: "kube-proxy"
+    cluster_name: "{{ kubernetes_cluster_name }}"
+    user: "system:kube-proxy"
+    kubernetes_control_plane_server: "https://{{ kubernetes_public_address }}:{{ kubernetes_public_port }}"
+    client_certificate: "{{ local_certificate_storage_path }}/kube-proxy.pem"
+    client_key: "{{ local_certificate_storage_path }}/kube-proxy-key.pem"
+    certificate_authority_certificate_location: /var/lib/kubernetes
+
+- name: Move to correct location
+  copy:
+    src: "/var/lib/kube-proxy/kube-proxy.kubeconfig"
+    dest: "/var/lib/kube-proxy/kubeconfig"
+
+- name: Install dependencies
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - conntrack
+    - socat
+    - ipset
+
+- name: Download kube binaries
+  get_url:
+    url: "{{ item }}"
+    mode: 0755
+    dest: "/tmp/{{ item.split('/')[-1] }}"
+  with_items:
+    - "{{ runsc_url }}"
+    - "{{ runc_url }}"
+    - "{{ kube_proxy_url }}"
+    - "{{ kubelet_url }}"
+
+- name: Install kube binaries
+  copy:
+    src: "/tmp/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    mode: 0755
+  with_items:
+    - kube-proxy
+    - kubelet
+    - runsc
+
+- name: Install runc
+  copy:
+    src: /tmp/runc.amd64
+    dest: /usr/local/bin/runc
+    mode: 0755
+
+- name: Install runtime and CNI components
+  unarchive:
+    src: "{{ item.split(';')[0] }}"
+    dest: "{{ item.split(';')[1] }}"
+    remote_src: yes
+  with_items:
+    - "{{ crictl_url }};/usr/local/bin"
+    - "{{ cni_plugins_url }};/opt/cni/bin"
+    - "{{ containerd_url }};/"
+
+- name: Provision CNI configurations
+  template:
+    src: "templates/{{ item }}.conf.j2"
+    dest: "/etc/cni/net.d/{{ item }}.conf"
+  with_items:
+    - 10-bridge
+    - 99-loopback
+
+- name: Create containerd configuration
+  copy:
+    src: files/containerd_config.toml
+    dest: /etc/containerd/config.toml
+
+- name: Create configuration manifests.
+  template:
+    src: "templates/{{ item }}-config.yaml.j2"
+    dest: "/var/lib/{{ item }}/{{ item }}-config.yaml"
+  with_items:
+    - kubelet
+    - kube-proxy
+
+- name: Create systemd services
+  copy:
+    src: "files/{{ item }}.service"
+    dest: "/etc/systemd/system/{{ item }}.service"
+  with_items:
+    - kubelet
+    - kube-proxy
+    - containerd
+
+# Even though we have the CA cert and key on our system
+# Ansible doesn't support using it with the 'uri' module.
+# I'd rather try this insecurely than worry about adding it to the
+# list of system certs.
+- name: Wait for the Kubernetes control plane to start up
+  uri:
+    url: "https://{{ kubernetes_public_address }}:{{ kubernetes_public_port }}/version"
+    validate_certs: no
+  register: kube_api_response
+  until: kube_api_response.status == 200
+  retries: "{{ kubernetes_control_plane_wait_delay_seconds }}"
+  delay: 1
+
+- name: Start systemd services
+  systemd:
+    name: "{{ item }}"
+    daemon_reload: yes
+    state: restarted
+  with_items:
+    - kubelet
+    - kube-proxy
+    - containerd

@@ -1,0 +1,8 @@
+---
+
+certificate_s3_bucket: "{{ ansible_env.KUBERNETES_CERTIFICATE_S3_BUCKET }}"
+certificate_s3_key: "{{ ansible_env.KUBERNETES_CERTIFICATE_S3_KEY }}"
+kubernetes_public_address: "kubernetes.{{ ansible_env.DOMAIN_NAME }}"
+kubernetes_public_port: "{{ ansible_env.KUBERNETES_PUBLIC_PORT }}"
+kubernetes_cluster_name: "{{ ansible_env.KUBERNETES_CLUSTER_NAME }}"
+domain_name: "{{ ansible_env.DOMAIN_NAME }}"

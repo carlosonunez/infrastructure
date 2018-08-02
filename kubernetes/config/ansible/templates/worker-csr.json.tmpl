@@ -1,0 +1,21 @@
+{
+  "hosts": [
+    "{{ external_ip }}",
+    "{{ ansible_default_ipv4.address }}",
+    "{{ system_hostname }}"
+  ],
+  "CN": "system:node:{{ system_hostname }}",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "{{ kubernetes_ca_country_code }}",
+      "L": "{{ kubernetes_ca_location_code }}",
+      "O": "system:nodes",
+      "OU": "{{ kubernetes_ca_ou_code }}",
+      "ST": "{{ kubernetes_ca_state_code }}"
+    }
+  ]
+}

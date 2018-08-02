@@ -1,0 +1,6 @@
+{
+  "kubernetes_role": {
+    "value": "etcd",
+    "propagate": true
+  }
+}

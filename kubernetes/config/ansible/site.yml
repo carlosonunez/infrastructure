@@ -1,0 +1,53 @@
+---
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Python (when ssh becomes available)
+      package:
+        name: python
+      become: true
+      retries: 10
+      delay: 20
+
+    - name: Get pip installer.
+      get_url:
+        url: https://bootstrap.pypa.io/get-pip.py
+        dest: /tmp/get-pip.py
+        mode: 0755
+
+    - name: Install pip.
+      shell: python /tmp/get-pip.py
+      tags:
+        - skip_ansible_lint
+
+    - name: Install required packages
+      pip:
+        name: "{{ item }}"
+      with_items:
+        - botocore
+        - docker-py
+        - boto3
+        - boto
+
+    - name: Tell us the kind of node that we are provisioning
+      debug:
+        msg: "Ansible is provisioning a new: {{ lookup('env', 'INSTANCE_ROLE') }}"
+
+- hosts: localhost
+  connection: local
+  roles:
+    - common
+    - role: "{{ lookup('env', 'INSTANCE_ROLE') }}"
+
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Delete sensitive info.
+      file:
+        state: absent
+        path: "{{ local_certificate_storage_path }}/*.{{ item }}"
+      with_items:
+        - pem
+        - kubeconfig

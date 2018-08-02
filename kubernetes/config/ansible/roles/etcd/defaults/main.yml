@@ -1,0 +1,30 @@
+---
+
+etcd_version: "3.3.5"
+etcd_url: "https://github.com/coreos/etcd/releases/download/v{{ etcd_version }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+etcd_cluster_token: etcd-cluster-0
+etcd_confirm_command: >-
+  ETCDCTL_API=3 /usr/local/bin/etcdctl member list
+  --endpoints=https://127.0.0.1:2379
+  --cacert=/etc/etcd/ca.pem
+  --cert=/etc/etcd/kubernetes.pem
+  --key=/etc/etcd/kubernetes-key.pem
+etcd_start_command: >-
+  /usr/local/bin/etcd \
+    --name {{ system_hostname }} \
+    --cert-file=/etc/etcd/kubernetes.pem \
+    --key-file=/etc/etcd/kubernetes-key.pem \
+    --peer-cert-file=/etc/etcd/kubernetes.pem \
+    --peer-key-file=/etc/etcd/kubernetes-key.pem \
+    --trusted-ca-file=/etc/etcd/ca.pem \
+    --peer-trusted-ca-file=/etc/etcd/ca.pem \
+    --peer-client-cert-auth \
+    --client-cert-auth \
+    --initial-advertise-peer-urls https://{{ ansible_default_ipv4.address }}:2380 \
+    --listen-peer-urls https://{{ ansible_default_ipv4.address }}:2380 \
+    --listen-client-urls https://{{ ansible_default_ipv4.address }}:2379,https://127.0.0.1:2379 \
+    --advertise-client-urls https://{{ ansible_default_ipv4.address }}:2379 \
+    --initial-cluster-token "{{ etcd_cluster_token }}" \
+    --initial-cluster "{{ etcd_initial_cluster_string }}" \
+    --initial-cluster-state new \
+    --data-dir=/var/lib/etcd

@@ -1,0 +1,22 @@
+---
+
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Delete the vars file in S3 if we're regenerating
+      aws_s3:
+        mode: delobj
+        bucket: "{{ ansible_env.ANSIBLE_VARS_S3_BUCKET }}"
+        object: "{{ ansible_env.ANSIBLE_VARS_S3_KEY }}/{{ ansible_env.ENVIRONMENT_NAME }}/ansible_vars.yml"
+
+    - name: Parse Ansible vars template
+      template:
+        src: templates/ansible_vars.yml.tmpl
+        dest: /tmp/ansible_vars.yml
+
+    - name: Upload template to s3
+      aws_s3:
+        bucket: "{{ ansible_env.ANSIBLE_VARS_S3_BUCKET }}"
+        object: "{{ ansible_env.ANSIBLE_VARS_S3_KEY }}/{{ ansible_env.ENVIRONMENT_NAME }}/ansible_vars.yml"
+        src: /tmp/ansible_vars.yml
+        mode: put

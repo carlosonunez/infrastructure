@@ -1,0 +1,96 @@
+---
+- name: Retrieve our certificate token
+  set_fact:
+    certificate_token: "{{ lookup('env', 'CERT_TOKEN') }}"
+  failed_when: certificate_token == ""
+
+- name: Set the name to use for creating the cert.
+  when: certificate_csr_name != "worker"
+  set_fact:
+    certificate_file_name: "{{ certificate_csr_name }}"
+
+- name: Set the name to use for our cert as the host's hostname.
+  when: certificate_csr_name == "worker"
+  set_fact:
+    certificate_file_name: "{{ system_hostname }}"
+
+- name: Delete existing certificate
+  aws_s3:
+    bucket: "{{ certificate_s3_bucket }}"
+    object: "{{ certificate_s3_key }}/{{ environment_name }}/{{ item }}"
+    mode: delobj
+  with_items:
+    - "{{ certificate_file_name }}.pem"
+    - "{{ certificate_file_name }}-key.pem"
+
+
+- name: Get all running instances within our cluster.
+  when: certificate_csr_name == "kubernetes"
+  ec2_instance_facts:
+    filters:
+      instance-state-name: running
+  register: found_instances
+
+- name: Create a list of IP addresses
+  when: certificate_csr_name == "kubernetes"
+  set_fact:
+    cluster_ip_addresses_string: "{% for instance in found_instances.instances %}\"{{instance.private_ip_address}}\",{% endfor %}"
+
+- name: Remove last comma in IP address string.
+  when: certificate_csr_name == "kubernetes"
+  set_fact:
+    cluster_ip_addresses_string: "{{ cluster_ip_addresses_string[:-1] }}"
+
+- name: Generate our cfssl config
+  copy:
+    src: "{{ ansible_home_directory }}/files/ca-config.json"
+    dest: "{{ local_certificate_storage_path }}/ca-config.json"
+
+- name: Generate signing request
+  template:
+    src: "{{ ansible_home_directory }}/templates/{{ certificate_csr_name }}-csr.json.tmpl"
+    dest: "{{ local_certificate_storage_path }}/{{ certificate_csr_name }}-csr.json"
+
+- name: Provision the certificate authority.
+  when: certificate_csr_name == "ca"
+  shell: cfssl gencert -initca {{ certificate_csr_name }}-csr.json | cfssljson -bare {{ certificate_file_name }}
+  args:
+    chdir: "{{ local_certificate_storage_path }}"
+  register: ca_result
+  failed_when: ca_result.rc != 0
+
+- name: Provision the certificate.
+  when: certificate_csr_name != "ca"
+  shell: cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes {{ certificate_csr_name }}-csr.json | cfssljson -bare {{ certificate_file_name }}
+  args:
+    chdir: "{{ local_certificate_storage_path }}"
+  register: cert_provision_result
+  failed_when: cert_provision_result.rc != 0
+
+- name: Check that the certificate and private key were generated.
+  stat:
+    path: "{{ local_certificate_storage_path }}/{{ item }}"
+  with_items:
+    - "{{ certificate_file_name }}.pem"
+    - "{{ certificate_file_name }}-key.pem"
+  register: found_certificate_components
+  failed_when: not found_certificate_components.stat.exists
+
+- name: Upload certificate into AWS S3
+  aws_s3:
+    bucket: "{{ certificate_s3_bucket }}"
+    object: "{{ certificate_s3_key }}/{{ environment_name }}/{{ certificate_token }}-{{ item }}"
+    src: "{{ local_certificate_storage_path }}/{{ item }}"
+    mode: put
+  with_items:
+    - "{{ certificate_file_name }}.pem"
+    - "{{ certificate_file_name }}-key.pem"
+
+- name: Copy certificate and private key into home directory
+  when: copy_cert_to_home_directory is defined and copy_cert_to_home_directory == True and (certificate_csr_name == "ca" or not certificates_already_present_in_s3)
+  copy:
+    src: "{{ local_certificate_storage_path }}/{{ item }}"
+    dest: "{{ ansible_env.HOME }}"
+  with_items:
+    - "{{ certificate_file_name }}.pem"
+    - "{{ certificate_file_name }}-key.pem"

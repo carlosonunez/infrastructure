@@ -1,6 +1,7 @@
 resource "aws_elb" "kubernetes_control_plane" {
   name = "kubernetes"
   subnets = [ "${aws_subnet.kubernetes_control_plane.*.id}" ]
+  instances = [ "${aws_spot_instance_request.kubernetes_control_plane.*.spot_instance_id}" ]
   security_groups = [ "${aws_security_group.kubernetes_control_plane_lb.id}" ]
   listener {
     instance_port = "${local.kubernetes_internal_port}"
