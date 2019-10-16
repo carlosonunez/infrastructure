@@ -51,7 +51,7 @@ PRIVATE_KEY_PATH_VARIABLE := temporary_key_path
 SKIP_BUILDING_IMAGES ?= false
 SKIP_LOCAL_ENVIRONMENT_PREP ?= false
 SSH_DELAY_IN_SECONDS ?= 60
-TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
+TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform:0.11.9
 
 .PHONY: \
 	deploy_cluster \
@@ -70,7 +70,6 @@ TERRAFORM_DOCKER_IMAGE ?= hashicorp/terraform
 deploy_cluster:
 	$(MAKE) generate_certificate_token && \
 	$(MAKE) build_config_mgmt_image && \
-	$(MAKE) lint_configuration && \
 	$(MAKE) prepare_local_environment && \
 	$(MAKE) configure_terraform && \
 	$(MAKE) configure_terraform_tags && \

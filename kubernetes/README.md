@@ -40,6 +40,9 @@ Cool! Here are some instructions to help you out.
 
 ## Deploying
 
+**NOTE**: If you are using a Mac, ensure that you are using the GNU version of sed by installing 
+`brew install gnu-sed` on your Mac and aliasing `sed` to `$(which gsed)`.
+
 1. Copy the `.env.example`: `cat .env.example | grep -Ev '^#' > .env`
 2. Fill in the environment variables provided with your desired values.
 3. Run `make deploy_cluster`. You will hear one bell when SSH access is available and three bells when Kubernetes is accessible.
